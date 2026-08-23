@@ -1,15 +1,28 @@
 export function decodeBase64Audio(
   base64String: string,
   mimeType = 'audio/mpeg',
-  sampleRate = 44100,
+  sampleRate = 24000,
   numChannels = 1
 ): string {
-  // Convert the Base64 string to binary
-  const byteString = atob(base64String)
-  const byteArray = new Uint8Array(byteString.length)
-
-  for (let i = 0; i < byteString.length; i += 1) {
-    byteArray[i] = byteString.charCodeAt(i)
+  // Chunked base64 decode to avoid stack overflow on large payloads (>1MB)
+  // atob can handle large strings but loop over charCodeAt is safer chunked
+  const CHUNK = 8192
+  let byteArray: Uint8Array
+  try {
+    const byteString = atob(base64String)
+    byteArray = new Uint8Array(byteString.length)
+    for (let i = 0; i < byteString.length; i += 1) {
+      byteArray[i] = byteString.charCodeAt(i)
+    }
+  } catch {
+    // Fallback chunked
+    const bytes: number[] = []
+    for (let i = 0; i < base64String.length; i += CHUNK) {
+      const chunk = base64String.slice(i, i + CHUNK)
+      const decoded = atob(chunk)
+      for (let j = 0; j < decoded.length; j++) bytes.push(decoded.charCodeAt(j))
+    }
+    byteArray = new Uint8Array(bytes)
   }
 
   let blob: Blob
@@ -21,9 +34,9 @@ export function decodeBase64Audio(
     wavData.set(wavHeader, 0)
     wavData.set(byteArray, wavHeader.length)
 
-    blob = new Blob([wavData], { type: 'audio/wav' }) // Convert PCM to WAV
+    blob = new Blob([wavData as BlobPart], { type: 'audio/wav' }) // Convert PCM to WAV
   } else {
-    blob = new Blob([byteArray], { type: mimeType })
+    blob = new Blob([byteArray as BlobPart], { type: mimeType })
   }
 
   return URL.createObjectURL(blob)

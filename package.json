@@ -3,9 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "dev": "python scripts/run.py",
+    "dev:all": "python scripts/run.py --with-frontend",
     "dev:backend": "cd backend && uv run python server.py",
     "dev:frontend": "cd frontend && npm run dev",
     "dev:worker": "cd backend && uv run python livekit_worker.py dev",
+    "dev:backend+worker": "python scripts/run.py",
+    "dev:sh": "bash scripts/run.sh",
+    "dev:sh:all": "bash scripts/run.sh --with-frontend",
     "typecheck": "cd frontend && npm run typecheck",
     "test:voice": "cd backend && uv run python scripts/voice.py"
   }

@@ -47,10 +47,12 @@ async def run_voice_turn(user_transcript: str):
             print(token, end="", flush=True)
             agent_full_text += token
 
-    # 3. Generate Deepgram TTS (Aura Voice) using SDK v7
+    # 3. Generate Deepgram TTS (Flux Voice) using SDK v7
+    # flux-brooke-en is the unified streaming voice; batch REST uses v1/speak, streaming uses v2
+    # Deepgram SDK maps flux via v1 audio.generate with flux model — fallback to REST if streaming unavailable
     audio_stream = deepgram.speak.v1.audio.generate(
         text=agent_full_text,
-        model="aura-luna-en"
+        model="flux-brooke-en"
     )
     
     # Save audio response to file

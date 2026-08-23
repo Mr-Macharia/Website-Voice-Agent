@@ -59,7 +59,9 @@ const LiveKitVoiceSession: React.FC<{
   const toggleMute = async () => {
     if (!localParticipant) return
     try {
-      const audioTrack = localParticipant.getTrackPublication(Track.Source.Microphone)
+      const audioTrack = localParticipant.getTrackPublication(
+        Track.Source.Microphone
+      )
       if (audioTrack && audioTrack.track) {
         if (isMuted) {
           await audioTrack.track.unmute()
@@ -75,31 +77,36 @@ const LiveKitVoiceSession: React.FC<{
   }
 
   return (
-    <div className="flex flex-col h-[540px] w-full justify-between">
+    <div className="flex h-[540px] w-full flex-col justify-between">
       <RoomAudioRenderer />
 
       {/* Top Status Header */}
       <div className="flex items-center justify-between border-b border-white/5 px-6 py-3">
         <div className="flex items-center gap-2">
-          <span className="flex size-2.5 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="text-xs font-mono text-zinc-300">LiveKit Room: {room.name || 'Connected'}</span>
+          <span className="flex size-2.5 animate-pulse rounded-full bg-emerald-400" />
+          <span className="font-mono text-xs text-zinc-300">
+            LiveKit Room: {room.name || 'Connected'}
+          </span>
         </div>
-        <div className="text-xs font-mono text-zinc-400">
-          Agent State: <span className="uppercase text-primary font-semibold">{agentState}</span>
+        <div className="font-mono text-xs text-zinc-400">
+          Agent State:{' '}
+          <span className="font-semibold uppercase text-primary">
+            {agentState}
+          </span>
         </div>
       </div>
 
       {/* Visualizer Centerpiece */}
-      <div className="flex flex-col items-center justify-center flex-1 py-4">
+      <div className="flex flex-1 flex-col items-center justify-center py-4">
         <VoiceVisualizer state={agentState} barCount={11} />
-        
+
         <div className="mt-4 w-full max-w-md px-6 text-center">
-          <div className="text-xs text-zinc-400 italic">
+          <div className="text-xs italic text-zinc-400">
             {agentState === 'speaking'
               ? `${agentName} is responding...`
               : agentState === 'thinking'
-              ? 'Processing speech...'
-              : 'Speak naturally into your microphone...'}
+                ? 'Processing speech...'
+                : 'Speak naturally into your microphone...'}
           </div>
         </div>
       </div>
@@ -134,10 +141,13 @@ const DirectVoiceSession: React.FC<{
   const [showHistory, setShowHistory] = useState(false)
   const [copied, setCopied] = useState(false)
   const [history, setHistory] = useState<ConversationTurn[]>([])
-  const [statusMessage, setStatusMessage] = useState('Connecting to Deepgram Voice Bridge...')
+  const [statusMessage, setStatusMessage] = useState(
+    'Connecting to Deepgram Voice Bridge...'
+  )
 
   const wsRef = useRef<WebSocket | null>(null)
   const audioCtxRef = useRef<AudioContext | null>(null)
+  const gainNodeRef = useRef<GainNode | null>(null)
   const nextStartTimeRef = useRef(0)
   const mediaStreamRef = useRef<MediaStream | null>(null)
   const isSpeakingRef = useRef(false)
@@ -149,6 +159,18 @@ const DirectVoiceSession: React.FC<{
   const isAgentSpeakingRef = useRef(false)
   const currentUserTranscriptRef = useRef('')
   const currentAgentTextRef = useRef('')
+  const workletNodeRef = useRef<AudioWorkletNode | null>(null)
+  const voiceStateRef = useRef<VoiceState>('connecting')
+  const sessionIdRef = useRef<string>('')
+  // Jitter & confident-speech refs (Brave + 120ms buffer tuned)
+  const isFirstChunkRef = useRef(true)
+  const resumePromiseRef = useRef<Promise<void> | null>(null)
+  const lastTurnCompleteRef = useRef(false)
+  const consecutiveVoiceFramesRef = useRef(0)
+  const consecutiveSilenceFramesRef = useRef(0)
+  const bargeInCooldownRef = useRef(0)
+  const vadHistoryRef = useRef<boolean[]>([])
+  const turnIdRef = useRef(0)
 
   useEffect(() => {
     isMutedRef.current = isMuted
@@ -159,19 +181,77 @@ const DirectVoiceSession: React.FC<{
   }, [isPushToTalk])
 
   useEffect(() => {
-    isAgentSpeakingRef.current = voiceState === 'speaking' || activeSourcesRef.current.length > 0
+    isAgentSpeakingRef.current =
+      voiceState === 'speaking' || activeSourcesRef.current.length > 0
+    voiceStateRef.current = voiceState
   }, [voiceState])
 
-  const stopAudioPlayback = () => {
-    activeSourcesRef.current.forEach((src) => {
+  // Generate/persist session_id for Agno memory (sent as session_id in WS JSON)
+  useEffect(() => {
+    if (!sessionIdRef.current) {
+      let sid = ''
       try {
-        src.stop()
-        src.disconnect()
+        sid = localStorage.getItem('voice-bridge-session-id') || ''
       } catch {}
-    })
+      if (!sid) {
+        sid = `voice-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+        try {
+          localStorage.setItem('voice-bridge-session-id', sid)
+        } catch {}
+      }
+      sessionIdRef.current = sid
+    }
+  }, [])
+
+  const stopAudioPlayback = () => {
+    const ctx = audioCtxRef.current
+    const gain = gainNodeRef.current
+    // Gentle fade to avoid click/pop on barge-in (Brave renders loud pops without ramp)
+    if (gain && ctx && ctx.state !== 'closed') {
+      try {
+        const now = ctx.currentTime
+        gain.gain.cancelScheduledValues(now)
+        gain.gain.setValueAtTime(gain.gain.value, now)
+        gain.gain.linearRampToValueAtTime(0, now + 0.04)
+      } catch {}
+    }
+    // Delay stop by 40ms to let fade complete, else immediate
+    const sources = [...activeSourcesRef.current]
+    if (gain && ctx) {
+      setTimeout(() => {
+        sources.forEach((src) => {
+          try {
+            src.stop()
+            src.disconnect()
+          } catch {}
+        })
+        // Restore gain for next turn
+        try {
+          if (gain && ctx && ctx.state !== 'closed') {
+            gain.gain.cancelScheduledValues(ctx.currentTime)
+            gain.gain.setValueAtTime(1, ctx.currentTime)
+          }
+        } catch {}
+      }, 40)
+    } else {
+      sources.forEach((src) => {
+        try {
+          src.stop()
+          src.disconnect()
+        } catch {}
+      })
+    }
     activeSourcesRef.current = []
     nextStartTimeRef.current = 0
+    isFirstChunkRef.current = true
+    lastTurnCompleteRef.current = false
     isAgentSpeakingRef.current = false
+    // Notify backend to cancel Flux TTS turn (Flux Interrupt) — frontend already debounced
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      try {
+        wsRef.current.send(JSON.stringify({ type: 'Interrupt' }))
+      } catch {}
+    }
   }
 
   const sampleBufferRef = useRef<Float32Array[]>([])
@@ -179,7 +259,10 @@ const DirectVoiceSession: React.FC<{
   const scriptProcessorRef = useRef<ScriptProcessorNode | null>(null)
 
   // Encode Float32 PCM samples to 16-bit Mono WAV format (100% supported by Deepgram Nova-3)
-  const encodeWavBuffer = (samples: Float32Array, sampleRate: number = 16000): ArrayBuffer => {
+  const encodeWavBuffer = (
+    samples: Float32Array,
+    sampleRate: number = 16000
+  ): ArrayBuffer => {
     const buffer = new ArrayBuffer(44 + samples.length * 2)
     const view = new DataView(buffer)
 
@@ -194,11 +277,11 @@ const DirectVoiceSession: React.FC<{
     writeStr(8, 'WAVE')
     writeStr(12, 'fmt ')
     view.setUint32(16, 16, true) // Subchunk1Size
-    view.setUint16(20, 1, true)  // Linear PCM
-    view.setUint16(22, 1, true)  // Mono (1 channel)
+    view.setUint16(20, 1, true) // Linear PCM
+    view.setUint16(22, 1, true) // Mono (1 channel)
     view.setUint32(24, sampleRate, true) // Sample rate
     view.setUint32(28, sampleRate * 2, true) // Byte rate (SampleRate * 1 * 16/8)
-    view.setUint16(32, 2, true)  // Block align (1 * 16/8)
+    view.setUint16(32, 2, true) // Block align (1 * 16/8)
     view.setUint16(34, 16, true) // Bits per sample (16-bit)
     writeStr(36, 'data')
     view.setUint32(40, samples.length * 2, true)
@@ -206,16 +289,27 @@ const DirectVoiceSession: React.FC<{
     let offset = 44
     for (let i = 0; i < samples.length; i++, offset += 2) {
       const s = Math.max(-1, Math.min(1, samples[i]))
-      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true)
+      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true)
     }
 
     return buffer
   }
 
-  const downsampleTo16k = (buffer: Float32Array, inputRate: number): Float32Array => {
+  const downsampleTo16k = (
+    buffer: Float32Array,
+    inputRate: number
+  ): Float32Array => {
     if (inputRate === 16000) return buffer
+    // Simple 2-tap low-pass before decimate to reduce aliasing (Brave + Flux quality)
+    // Light smoothing: y[n] = 0.5*x[n] + 0.5*x[n-1]
+    const filtered = new Float32Array(buffer.length)
+    let prev = 0
+    for (let i = 0; i < buffer.length; i++) {
+      filtered[i] = 0.5 * buffer[i] + 0.5 * prev
+      prev = buffer[i]
+    }
     const ratio = inputRate / 16000
-    const newLen = Math.round(buffer.length / ratio)
+    const newLen = Math.round(filtered.length / ratio)
     const result = new Float32Array(newLen)
     let offsetResult = 0
     let offsetBuffer = 0
@@ -223,8 +317,12 @@ const DirectVoiceSession: React.FC<{
       const nextOffsetBuffer = Math.round((offsetResult + 1) * ratio)
       let accum = 0
       let count = 0
-      for (let i = offsetBuffer; i < nextOffsetBuffer && i < buffer.length; i++) {
-        accum += buffer[i]
+      for (
+        let i = offsetBuffer;
+        i < nextOffsetBuffer && i < filtered.length;
+        i++
+      ) {
+        accum += filtered[i]
         count++
       }
       result[offsetResult] = count > 0 ? accum / count : 0
@@ -235,9 +333,14 @@ const DirectVoiceSession: React.FC<{
   }
 
   const preRollBufferRef = useRef<Float32Array[]>([])
-  const noiseFloorRef = useRef(0.01)
+  const noiseFloorRef = useRef(0.015)
   const lastSpeechTimeRef = useRef(0)
   const speechStartTimeRef = useRef(0)
+  // Tunables for confident speech (Brave + Never interrupt)
+  const SILENCE_MS = 950
+  const PRE_ROLL_MS = 180
+  const CONFIDENT_VOICE_MS = 350
+  const BARGE_COOLDOWN_MS = 800
 
   const startAudioRecording = () => {
     // Include the pre-roll buffer to preserve the first syllable
@@ -247,7 +350,8 @@ const DirectVoiceSession: React.FC<{
   }
 
   const stopAudioRecordingAndSend = () => {
-    if (!isRecordingAudioRef.current && sampleBufferRef.current.length === 0) return
+    if (!isRecordingAudioRef.current && sampleBufferRef.current.length === 0)
+      return
     isSpeakingRef.current = false
     isRecordingAudioRef.current = false
     if (silenceTimerRef.current) {
@@ -263,7 +367,6 @@ const DirectVoiceSession: React.FC<{
     // Merge Float32Array chunks
     let totalLen = 0
     for (const c of chunks) totalLen += c.length
-    if (totalLen < 3200) return // Skip tiny clicks (<200ms)
 
     const merged = new Float32Array(totalLen)
     let curOffset = 0
@@ -272,15 +375,35 @@ const DirectVoiceSession: React.FC<{
       curOffset += c.length
     }
 
-    const currentRate = audioCtxRef.current?.sampleRate || 48000
+    // Detect actual capture rate: prefer MediaStreamTrack settings (Brave may ignore AudioContext constraint), fallback to AudioContext
+    let currentRate = audioCtxRef.current?.sampleRate || 48000
+    try {
+      const track = mediaStreamRef.current?.getAudioTracks()?.[0]
+      const settings = track?.getSettings?.() as MediaTrackSettings & { sampleRate?: number }
+      if (settings?.sampleRate && settings.sampleRate >= 8000 && settings.sampleRate <= 48000) {
+        currentRate = settings.sampleRate
+      }
+    } catch {}
     const downsampled = downsampleTo16k(merged, currentRate)
     const wavBuffer = encodeWavBuffer(downsampled, 16000)
 
+    // Keep 50ms floor (800 samples @16k) so "yes"/"no" not dropped, but confident turns <400ms still filtered if silence-triggered
+    if (downsampled.length < 800) return
+    // If total speech <400ms (6400 samples) and triggered by silence, likely false trigger — keep but log
+    const totalMs = (downsampled.length / 16000) * 1000
+    if (totalMs < 400) {
+      console.debug(`[VAD] Short turn ${totalMs.toFixed(0)}ms — still sending (confident check passed)`)
+    }
+
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      turnIdRef.current += 1
       setVoiceState('thinking')
-      setStatusMessage('Processing speech (Deepgram Nova-3)...')
+      setStatusMessage('Processing speech (Deepgram Flux)...')
       setAgentText('')
       currentAgentTextRef.current = ''
+      // Reset jitter first-chunk flag for next TTS turn
+      isFirstChunkRef.current = true
+      lastTurnCompleteRef.current = false
 
       try {
         wsRef.current.send(wavBuffer)
@@ -298,13 +421,35 @@ const DirectVoiceSession: React.FC<{
     try {
       const AudioContextClass =
         window.AudioContext ||
-        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
-      audioCtxRef.current = new AudioContextClass()
+        (window as unknown as { webkitAudioContext: typeof AudioContext })
+          .webkitAudioContext
+      // Try 48000 to match Deepgram Settings input 48000, but fallback gracefully for Brave/Safari
+      try {
+        audioCtxRef.current = new AudioContextClass({
+          sampleRate: 48000
+        } as AudioContextOptions)
+      } catch {
+        audioCtxRef.current = new AudioContextClass()
+      }
+      if (audioCtxRef.current.sampleRate !== 48000) {
+        console.warn(
+          `AudioContext sampleRate ${audioCtxRef.current.sampleRate} != 48000 (Settings input), will downsample correctly`
+        )
+      }
+      // Create a master gain node for TTS playback (allows fade on barge-in, 120ms jitter buffer)
+      try {
+        gainNodeRef.current = audioCtxRef.current.createGain()
+        gainNodeRef.current.gain.value = 1
+        gainNodeRef.current.connect(audioCtxRef.current.destination)
+      } catch {}
     } catch (err) {
       console.warn('AudioContext initialization error:', err)
     }
 
-    const endpoint = selectedEndpoint || 'http://localhost:7777'
+    const endpoint = (selectedEndpoint || 'http://localhost:7777').replace(
+      /\/+$/,
+      ''
+    )
     const wsUrl = endpoint.replace(/^http/, 'ws') + '/ws/voice'
     const ws = new WebSocket(wsUrl)
     ws.binaryType = 'arraybuffer'
@@ -317,90 +462,221 @@ const DirectVoiceSession: React.FC<{
       toast.success('Connected to Deepgram Voice Bridge')
     }
 
-    ws.onmessage = (event) => {
+    ws.onmessage = async (event) => {
       if (!isMounted) return
 
-      if (typeof event.data === 'string') {
+      // Handle Blob fallback (some proxies deliver Blob even with binaryType arraybuffer)
+      let data = event.data
+      if (data instanceof Blob) {
         try {
-          const data = JSON.parse(event.data)
-          if (data.type === 'user_transcript') {
-            setUserTranscript(data.text)
-            currentUserTranscriptRef.current = data.text
-            setStatusMessage(`You: "${data.text}"`)
-          } else if (data.type === 'agent_text') {
+          data = await data.arrayBuffer()
+        } catch {
+          return
+        }
+      }
+
+      if (typeof data === 'string') {
+        try {
+          const parsed = JSON.parse(data)
+          if (parsed.type === 'user_transcript') {
+            setUserTranscript(parsed.text)
+            currentUserTranscriptRef.current = parsed.text
+            setStatusMessage(`You: "${parsed.text}"`)
+          } else if (parsed.type === 'agent_text') {
             setVoiceState('speaking')
-            setAgentText((prev) => prev + data.text)
-            currentAgentTextRef.current += data.text
+            setAgentText((prev) => prev + parsed.text)
+            currentAgentTextRef.current += parsed.text
             setStatusMessage(`${agentName} is responding...`)
-          } else if (data.type === 'turn_complete') {
-            const uText = currentUserTranscriptRef.current
-            const aText = currentAgentTextRef.current
+            } else if (
+              parsed.type === 'turn_complete' ||
+              parsed.type === 'interrupted'
+            ) {
+              const uText = currentUserTranscriptRef.current
+              const aText = currentAgentTextRef.current
 
-            if (uText && aText) {
-              const now = Date.now()
-              setHistory((prev) => [
-                ...prev,
-                { role: 'user', text: uText, timestamp: now - 1000 },
-                { role: 'agent', text: aText, timestamp: now }
-              ])
+              if (uText && aText) {
+                const now = Date.now()
+                setHistory((prev) => [
+                  ...prev,
+                  { role: 'user', text: uText, timestamp: now - 1000 },
+                  { role: 'agent', text: aText, timestamp: now }
+                ])
 
-              setMessages((prev) => [
-                ...prev,
-                {
-                  role: 'user',
-                  content: uText,
-                  created_at: now - 1000
-                },
-                {
-                  role: 'agent',
-                  content: aText,
-                  created_at: now
-                }
-              ])
-            }
+                setMessages((prev) => [
+                  ...prev,
+                  {
+                    role: 'user',
+                    content: uText,
+                    created_at: now - 1000
+                  },
+                  {
+                    role: 'agent',
+                    content: aText,
+                    created_at: now
+                  }
+                ])
+              }
 
-            const checkDone = () => {
-              if (activeSourcesRef.current.length === 0) {
-                if (isMounted) {
+              lastTurnCompleteRef.current = true
+              const completedTurnId = turnIdRef.current
+              // Wait for jitter buffer to drain: poll until empty, but ignore if new turn started
+              const checkDone = () => {
+                if (!isMounted) return
+                // If a new turn started, abort this check (new audio will manage state)
+                if (turnIdRef.current !== completedTurnId) return
+                if (activeSourcesRef.current.length === 0) {
                   setVoiceState('listening')
                   setStatusMessage('Listening for your voice...')
                   isAgentSpeakingRef.current = false
+                  lastTurnCompleteRef.current = false
+                  isFirstChunkRef.current = true
+                } else {
+                  setTimeout(checkDone, 80)
                 }
-              } else {
-                setTimeout(checkDone, 80)
               }
-            }
-            setTimeout(checkDone, 150)
-          } else if (data.type === 'no_speech') {
+              // Brave 120ms buffer: wait a bit longer than before to let jitter drain
+              setTimeout(checkDone, 180)
+          } else if (parsed.type === 'no_speech') {
             setVoiceState('listening')
             setStatusMessage('Listening for your voice...')
-          } else if (data.type === 'error') {
-            toast.error(data.message || 'Voice Turn Error')
+          } else if (parsed.type === 'error') {
+            toast.error(parsed.message || 'Voice Turn Error')
           }
         } catch {}
-      } else if (event.data instanceof ArrayBuffer && audioCtxRef.current) {
+      } else if (data instanceof ArrayBuffer && audioCtxRef.current) {
         setVoiceState('speaking')
         isAgentSpeakingRef.current = true
-        playPcmChunk(event.data)
+        playPcmChunk(data)
       }
     }
 
-    ws.onerror = (err) => {
-      console.error('Voice WS error:', err)
+    // The `error` event on a WebSocket is deliberately opaque (a bare Event with
+    // no cause, for cross-origin safety), so it can only report *that* the socket
+    // failed. The actionable detail arrives on `close` as the code/reason.
+    let didError = false
+
+    ws.onerror = () => {
+      didError = true
+      console.error(`Voice WS error: failed to connect to ${wsUrl}`)
       if (isMounted) {
         setVoiceState('error')
         setStatusMessage('Voice Bridge Connection Error')
       }
     }
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
+      // 1006 = abnormal closure: never completed a handshake. Almost always the
+      // backend not running/reachable at `endpoint`, or a wrong persisted endpoint.
+      const neverConnected = didError || event.code === 1006
+      if (neverConnected) {
+        console.error(
+          `Voice WS closed without connecting to ${wsUrl} ` +
+            `(code ${event.code}${event.reason ? `, reason: ${event.reason}` : ', no reason given'}). ` +
+            `Check that the voice backend is running and reachable at ${endpoint}.`
+        )
+      }
       if (isMounted) {
-        setVoiceState('idle')
-        setStatusMessage('Voice Bridge Disconnected')
+        setVoiceState(neverConnected ? 'error' : 'idle')
+        setStatusMessage(
+          neverConnected
+            ? `Cannot reach voice backend at ${endpoint}`
+            : 'Voice Bridge Disconnected'
+        )
       }
     }
 
-    // Initialize Microphone capture with adaptive RMS VAD & pre-roll
+    // Initialize Microphone capture with adaptive RMS VAD & pre-roll — Brave + confident speech tuned
+    // Uses AudioWorklet when available (off main thread, no glitches), fallback to ScriptProcessor
+    const handleAudioChunk = (inputData: Float32Array) => {
+      if (!isMounted || isMutedRef.current) {
+        return
+      }
+      const chunkCopy = new Float32Array(inputData)
+
+      // 1. Maintain ~180ms circular pre-roll buffer — dynamic size based on actual chunk duration (Brave 2.66ms @128 vs 42ms @2048)
+      const ctxRate = audioCtxRef.current?.sampleRate || 48000
+      const chunkMs = (inputData.length / ctxRate) * 1000
+      const maxPreRoll = Math.max(4, Math.ceil(PRE_ROLL_MS / Math.max(1, chunkMs)))
+      preRollBufferRef.current.push(chunkCopy)
+      if (preRollBufferRef.current.length > maxPreRoll) {
+        preRollBufferRef.current.shift()
+      }
+
+      // 2. High-precision RMS Calculation
+      let sumSq = 0
+      for (let i = 0; i < inputData.length; i++) {
+        sumSq += inputData[i] * inputData[i]
+      }
+      const rms = Math.sqrt(sumSq / inputData.length)
+
+      // Dynamic noise floor tracking (adapts to ambient, Brave lower floor)
+      noiseFloorRef.current = Math.min(
+        noiseFloorRef.current * 0.98 + rms * 0.02,
+        0.035
+      )
+      const speechThreshold = Math.max(0.032, noiseFloorRef.current * 3.0)
+      const isVoiceActiveRaw = rms > speechThreshold
+
+      // Majority-vote smoothing over last 12 frames (~32ms Worklet / 500ms ScriptProcessor) — confident speech only
+      vadHistoryRef.current.push(isVoiceActiveRaw)
+      if (vadHistoryRef.current.length > 12) vadHistoryRef.current.shift()
+      const voicedCount = vadHistoryRef.current.filter(Boolean).length
+      const isVoiceActive = voicedCount >= 7 // 7/12 majority
+
+      if (!isPushToTalkRef.current) {
+        const now = Date.now()
+
+        if (isVoiceActive) {
+          consecutiveVoiceFramesRef.current += 1
+          consecutiveSilenceFramesRef.current = 0
+          // Debounced barge-in: require confident voice (350ms continuous + cooldown) to cancel TTS (Never interrupt)
+          const neededFrames = Math.max(3, Math.ceil(CONFIDENT_VOICE_MS / Math.max(1, chunkMs)))
+          if (
+            isAgentSpeakingRef.current &&
+            consecutiveVoiceFramesRef.current >= neededFrames &&
+            now - bargeInCooldownRef.current > BARGE_COOLDOWN_MS
+          ) {
+            bargeInCooldownRef.current = now
+            stopAudioPlayback()
+          }
+
+          if (!isRecordingAudioRef.current) {
+            // Require confident start: at least 80ms of voice before opening turn (avoid breath pop)
+            if (consecutiveVoiceFramesRef.current >= Math.ceil(80 / Math.max(1, chunkMs))) {
+              isSpeakingRef.current = true
+              startAudioRecording()
+            } else {
+              // Still buffering pre-roll, not yet recording
+              return
+            }
+          }
+
+          sampleBufferRef.current.push(chunkCopy)
+          lastSpeechTimeRef.current = now
+        } else if (isRecordingAudioRef.current) {
+          consecutiveSilenceFramesRef.current += 1
+          consecutiveVoiceFramesRef.current = 0
+          sampleBufferRef.current.push(chunkCopy)
+
+          const silenceDuration = now - lastSpeechTimeRef.current
+          const totalDuration = now - speechStartTimeRef.current
+
+          if (silenceDuration > SILENCE_MS || totalDuration > 15000) {
+            // Reset confident counters on send
+            consecutiveVoiceFramesRef.current = 0
+            consecutiveSilenceFramesRef.current = 0
+            vadHistoryRef.current = []
+            stopAudioRecordingAndSend()
+          }
+        } else {
+          // Not recording, decay voice frames
+          consecutiveVoiceFramesRef.current = Math.max(0, consecutiveVoiceFramesRef.current - 1)
+        }
+      } else if (isRecordingAudioRef.current) {
+        sampleBufferRef.current.push(chunkCopy)
+      }
+    }
+
     const initMic = async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -408,7 +684,9 @@ const DirectVoiceSession: React.FC<{
             echoCancellation: true,
             noiseSuppression: true,
             autoGainControl: true,
-          }
+            channelCount: 1,
+            sampleRate: 48000
+          } as MediaTrackConstraints
         })
         if (!isMounted) {
           stream.getTracks().forEach((t) => t.stop())
@@ -428,92 +706,62 @@ const DirectVoiceSession: React.FC<{
           analyser.fftSize = 256
           analyser.smoothingTimeConstant = 0.3
 
-          // ScriptProcessor for continuous PCM sample recording & real-time RMS VAD
-          const processor = ctx.createScriptProcessor(2048, 1, 1)
-          scriptProcessorRef.current = processor
-
-          // Mute monitor to avoid echo feedback
+          // Try AudioWorklet (off main thread) first, fallback to ScriptProcessor
+          let workletNode: AudioWorkletNode | null = null
           const zeroGain = ctx.createGain()
           zeroGain.gain.value = 0
 
-          processor.onaudioprocess = (e) => {
-            if (!isMounted || isMutedRef.current) return
-            const inputData = e.inputBuffer.getChannelData(0)
-            const chunkCopy = new Float32Array(inputData)
-
-            // 1. Maintain 3-chunk (~130ms) circular pre-roll buffer
-            preRollBufferRef.current.push(chunkCopy)
-            if (preRollBufferRef.current.length > 4) {
-              preRollBufferRef.current.shift()
-            }
-
-            // 2. High-precision RMS Calculation for accurate Voice Activity Detection
-            let sumSq = 0
-            for (let i = 0; i < inputData.length; i++) {
-              sumSq += inputData[i] * inputData[i]
-            }
-            const rms = Math.sqrt(sumSq / inputData.length)
-
-            // Dynamic noise floor tracking (adapts to ambient room acoustics)
-            noiseFloorRef.current = Math.min(noiseFloorRef.current * 0.98 + rms * 0.02, 0.04)
-            const speechThreshold = Math.max(0.024, noiseFloorRef.current * 2.2)
-            const isVoiceActive = rms > speechThreshold
-
-            if (!isPushToTalkRef.current) {
-              const now = Date.now()
-
-              if (isVoiceActive) {
-                // If user speaks while agent is speaking: Barge-in interrupt
-                if (isAgentSpeakingRef.current) {
-                  stopAudioPlayback()
-                }
-
-                if (!isRecordingAudioRef.current) {
-                  isSpeakingRef.current = true
-                  startAudioRecording()
-                }
-
-                sampleBufferRef.current.push(chunkCopy)
-                lastSpeechTimeRef.current = now
-              } else if (isRecordingAudioRef.current) {
-                sampleBufferRef.current.push(chunkCopy)
-
-                // Silence threshold: 650ms of quiet after speaking, or 15s max utterance
-                const silenceDuration = now - lastSpeechTimeRef.current
-                const totalDuration = now - speechStartTimeRef.current
-
-                if (silenceDuration > 650 || totalDuration > 15000) {
-                  stopAudioRecordingAndSend()
-                }
+          const setupAnalyserLoop = () => {
+            const dataArray = new Uint8Array(analyser.frequencyBinCount)
+            const checkAudioLevel = () => {
+              if (!isMounted) return
+              analyser.getByteFrequencyData(dataArray)
+              let sum = 0
+              for (let i = 0; i < dataArray.length; i++) {
+                sum += dataArray[i]
               }
-            } else if (isRecordingAudioRef.current) {
-              sampleBufferRef.current.push(chunkCopy)
+              const avg = sum / dataArray.length
+              const normalizedVol = Math.min(1, (avg / 128) * 1.5)
+              setMicVolume(normalizedVol)
+              animFrameRef.current = requestAnimationFrame(checkAudioLevel)
             }
-          }
-
-          source.connect(analyser)
-          source.connect(processor)
-          processor.connect(zeroGain)
-          zeroGain.connect(ctx.destination)
-
-          const dataArray = new Uint8Array(analyser.frequencyBinCount)
-
-          const checkAudioLevel = () => {
-            if (!isMounted) return
-
-            analyser.getByteFrequencyData(dataArray)
-            let sum = 0
-            for (let i = 0; i < dataArray.length; i++) {
-              sum += dataArray[i]
-            }
-            const avg = sum / dataArray.length
-            const normalizedVol = Math.min(1, (avg / 128) * 1.5)
-            setMicVolume(normalizedVol)
-
             animFrameRef.current = requestAnimationFrame(checkAudioLevel)
           }
 
-          animFrameRef.current = requestAnimationFrame(checkAudioLevel)
+          try {
+            if (ctx.audioWorklet) {
+              await ctx.audioWorklet.addModule('/worklets/vad-processor.js')
+              workletNode = new AudioWorkletNode(ctx, 'vad-processor')
+              workletNodeRef.current = workletNode
+              workletNode.port.onmessage = (e: MessageEvent<Float32Array>) => {
+                handleAudioChunk(e.data)
+              }
+              source.connect(analyser)
+              source.connect(workletNode)
+              workletNode.connect(zeroGain)
+              zeroGain.connect(ctx.destination)
+              // Also connect analyser for volume visualization already done via source->analyser
+              setupAnalyserLoop()
+            } else {
+              throw new Error('AudioWorklet not supported')
+            }
+          } catch (e) {
+            console.warn(
+              'AudioWorklet unavailable, falling back to ScriptProcessor:',
+              e
+            )
+            const processor = ctx.createScriptProcessor(2048, 1, 1)
+            scriptProcessorRef.current = processor
+            processor.onaudioprocess = (ev) => {
+              const inputData = ev.inputBuffer.getChannelData(0)
+              handleAudioChunk(new Float32Array(inputData))
+            }
+            source.connect(analyser)
+            source.connect(processor)
+            processor.connect(zeroGain)
+            zeroGain.connect(ctx.destination)
+            setupAnalyserLoop()
+          }
         }
       } catch (err) {
         console.error('Microphone access error:', err)
@@ -533,28 +781,63 @@ const DirectVoiceSession: React.FC<{
         mediaStreamRef.current.getTracks().forEach((t) => t.stop())
       }
       if (scriptProcessorRef.current) {
-        scriptProcessorRef.current.disconnect()
+        try {
+          scriptProcessorRef.current.disconnect()
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ;(scriptProcessorRef.current.onaudioprocess as any) = null
+        } catch {}
+        scriptProcessorRef.current = null
+      }
+      if (workletNodeRef.current) {
+        try {
+          workletNodeRef.current.disconnect()
+          workletNodeRef.current.port.onmessage = null
+        } catch {}
+        workletNodeRef.current = null
       }
       stopAudioPlayback()
       if (audioCtxRef.current) {
-        audioCtxRef.current.close().catch(() => {})
+        // Don't close permanently; suspend to allow reuse on modal reopen (Chrome limits resumed contexts)
+        try {
+          if (audioCtxRef.current.state !== 'closed') {
+            audioCtxRef.current.suspend().catch(() => {})
+          }
+        } catch {}
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedEndpoint, agentName, setMessages])
 
-  // Seamless Jitter-Free PCM Audio Playback
+  // Seamless Jitter-Free PCM Audio Playback — Brave-tuned 120ms buffer + serialized resume
   const playPcmChunk = async (arrayBuffer: ArrayBuffer) => {
     if (!audioCtxRef.current) return
     const ctx = audioCtxRef.current
     if (ctx.state === 'suspended') {
+      if (!resumePromiseRef.current) {
+        resumePromiseRef.current = ctx
+          .resume()
+          .catch(() => {})
+          .finally(() => {
+            resumePromiseRef.current = null
+          })
+      }
       try {
-        await ctx.resume()
+        await resumePromiseRef.current
+      } catch {}
+    }
+    if (ctx.state === 'closed' || !audioCtxRef.current) return
+
+    // Ensure gain is live for post-interrupt audio (cancel fade-out ramp)
+    if (gainNodeRef.current) {
+      try {
+        gainNodeRef.current.gain.cancelScheduledValues(ctx.currentTime)
+        gainNodeRef.current.gain.setValueAtTime(1, ctx.currentTime)
       } catch {}
     }
 
-    // Ensure 16-bit 2-byte alignment
+    // Ensure 16-bit 2-byte alignment + drop tiny glitch frames (<20ms @24k = 960 bytes)
     const byteLen = arrayBuffer.byteLength - (arrayBuffer.byteLength % 2)
-    if (byteLen <= 0) return
+    if (byteLen <= 0 || byteLen < 960) return
 
     const int16Array = new Int16Array(arrayBuffer, 0, byteLen / 2)
     const float32Array = new Float32Array(int16Array.length)
@@ -562,42 +845,87 @@ const DirectVoiceSession: React.FC<{
       float32Array[i] = int16Array[i] / 32768.0
     }
 
-    // 24kHz Deepgram Flux TTS Buffer
+    // 24kHz Deepgram Flux TTS Buffer (matches Settings output 24000)
     const audioBuffer = ctx.createBuffer(1, float32Array.length, 24000)
     audioBuffer.getChannelData(0).set(float32Array)
 
     const source = ctx.createBufferSource()
     source.buffer = audioBuffer
-    source.connect(ctx.destination)
+    if (gainNodeRef.current) {
+      source.connect(gainNodeRef.current)
+    } else {
+      source.connect(ctx.destination)
+    }
 
-    // Seamless gap-free scheduling (standard Web Audio streaming pattern)
+    // 120ms jitter buffer: first chunk of a turn starts 120ms in future to absorb network variance
     const currentTime = ctx.currentTime
-    const startTime = Math.max(currentTime, nextStartTimeRef.current)
-    source.start(startTime)
+    if (isFirstChunkRef.current) {
+      nextStartTimeRef.current = currentTime + 0.12
+      isFirstChunkRef.current = false
+    }
+    const startTime = Math.max(currentTime + 0.02, nextStartTimeRef.current)
+    try {
+      source.start(startTime)
+    } catch (e) {
+      // Fallback: try immediate
+      try {
+        source.start()
+      } catch {
+        return
+      }
+    }
     nextStartTimeRef.current = startTime + audioBuffer.duration
 
     activeSourcesRef.current.push(source)
     source.onended = () => {
-      activeSourcesRef.current = activeSourcesRef.current.filter((s) => s !== source)
-      if (activeSourcesRef.current.length === 0 && voiceState !== 'speaking') {
-        isAgentSpeakingRef.current = false
+      activeSourcesRef.current = activeSourcesRef.current.filter(
+        (s) => s !== source
+      )
+      try {
+        source.disconnect()
+      } catch {}
+      const stillSpeaking = activeSourcesRef.current.length > 0
+      if (!stillSpeaking) {
+        if (lastTurnCompleteRef.current) {
+          // Turn already signaled complete — drain finished, go listening
+          lastTurnCompleteRef.current = false
+          isFirstChunkRef.current = true
+          isAgentSpeakingRef.current = false
+          // voiceState transition handled by ws handler, but ensure not stuck speaking
+          if (voiceStateRef.current === 'speaking') {
+            // Let ws handler manage, but fallback:
+            // setVoiceState handled via polling; keep flag consistent
+          }
+        } else if (voiceStateRef.current !== 'speaking') {
+          isAgentSpeakingRef.current = false
+        }
       }
     }
   }
 
   const handleSendPrompt = async (text: string) => {
-    if (!text.trim() || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return
+    if (
+      !text.trim() ||
+      !wsRef.current ||
+      wsRef.current.readyState !== WebSocket.OPEN
+    )
+      return
     if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
       await audioCtxRef.current.resume()
     }
     stopAudioPlayback()
+    turnIdRef.current += 1
+    isFirstChunkRef.current = true
+    lastTurnCompleteRef.current = false
     setUserTranscript(text.trim())
     currentUserTranscriptRef.current = text.trim()
     setVoiceState('thinking')
     setStatusMessage('Processing text prompt...')
     setAgentText('')
     currentAgentTextRef.current = ''
-    wsRef.current.send(JSON.stringify({ text: text.trim() }))
+    wsRef.current.send(
+      JSON.stringify({ text: text.trim(), session_id: sessionIdRef.current })
+    )
     setQuickInput('')
   }
 
@@ -636,63 +964,76 @@ const DirectVoiceSession: React.FC<{
   }
 
   return (
-    <div onClick={unlockAudio} className="flex flex-col h-[540px] w-full justify-between">
+    <div
+      onClick={unlockAudio}
+      className="flex h-[540px] w-full flex-col justify-between"
+    >
       {/* Top Status Header */}
       <div className="flex items-center justify-between border-b border-white/5 bg-[#0a0f1e]/80 px-6 py-3.5 backdrop-blur-xl">
         <div className="flex items-center gap-2">
-          <span className="flex size-2.5 rounded-full bg-[#f48c06] shadow-[0_0_8px_#f48c06] animate-pulse" />
-          <span className="text-xs font-mono text-zinc-300">Deepgram Voice Bridge</span>
+          <span className="flex size-2.5 animate-pulse rounded-full bg-[#f48c06] shadow-[0_0_8px_#f48c06]" />
+          <span className="font-mono text-xs text-zinc-300">
+            Deepgram Voice Bridge
+          </span>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowHistory(!showHistory)}
-            className={`flex items-center gap-1 text-[11px] font-mono px-3 py-1 rounded-full border transition-all ${
+            className={`flex items-center gap-1 rounded-full border px-3 py-1 font-mono text-[11px] transition-all ${
               showHistory
-                ? 'bg-[#e85d04]/20 border-[#e85d04]/50 text-[#f48c06]'
-                : 'bg-white/5 border-white/10 text-zinc-400 hover:text-zinc-200 hover:border-white/20'
+                ? 'border-[#e85d04]/50 bg-[#e85d04]/20 text-[#f48c06]'
+                : 'border-white/10 bg-white/5 text-zinc-400 hover:border-white/20 hover:text-zinc-200'
             }`}
             title="View full conversation transcript"
           >
             <MessageSquare className="size-3" />
-            <span>Transcript ({history.length / 2 | 0})</span>
+            <span>Transcript ({(history.length / 2) | 0})</span>
           </button>
           <button
             onClick={() => setIsPushToTalk(!isPushToTalk)}
-            className={`text-[11px] font-mono px-3 py-1 rounded-full border transition-all ${
+            className={`rounded-full border px-3 py-1 font-mono text-[11px] transition-all ${
               isPushToTalk
-                ? 'bg-amber-500/20 border-amber-500/40 text-amber-300'
-                : 'bg-white/5 border-white/10 text-zinc-400 hover:text-zinc-200 hover:border-white/20'
+                ? 'border-amber-500/40 bg-amber-500/20 text-amber-300'
+                : 'border-white/10 bg-white/5 text-zinc-400 hover:border-white/20 hover:text-zinc-200'
             }`}
           >
             {isPushToTalk ? 'Push-To-Talk' : 'Fast VAD'}
           </button>
-          <div className="text-xs font-mono text-zinc-400">
-            State: <span className="uppercase text-[#f48c06] font-semibold">{voiceState}</span>
+          <div className="font-mono text-xs text-zinc-400">
+            State:{' '}
+            <span className="font-semibold uppercase text-[#f48c06]">
+              {voiceState}
+            </span>
           </div>
         </div>
       </div>
 
       {showHistory ? (
         /* Full Transcript View */
-        <div className="flex flex-col flex-1 overflow-hidden p-6 bg-[#0a0f1e]/90">
-          <div className="flex items-center justify-between mb-3">
-            <h4 className="text-xs font-mono uppercase tracking-wider text-zinc-400">
-              Saved Conversation Turns ({history.length / 2 | 0})
+        <div className="flex flex-1 flex-col overflow-hidden bg-[#0a0f1e]/90 p-6">
+          <div className="mb-3 flex items-center justify-between">
+            <h4 className="font-mono text-xs uppercase tracking-wider text-zinc-400">
+              Saved Conversation Turns ({(history.length / 2) | 0})
             </h4>
             <Button
               variant="outline"
               size="sm"
               onClick={copyTranscriptText}
-              className="h-7 gap-1.5 rounded-lg border-white/10 bg-white/5 px-2.5 text-xs text-zinc-300 hover:bg-[#e85d04]/20 hover:border-[#e85d04]/40 hover:text-white transition-all"
+              className="h-7 gap-1.5 rounded-lg border-white/10 bg-white/5 px-2.5 text-xs text-zinc-300 transition-all hover:border-[#e85d04]/40 hover:bg-[#e85d04]/20 hover:text-white"
             >
-              {copied ? <Check className="size-3 text-[#22c55e]" /> : <Copy className="size-3" />}
+              {copied ? (
+                <Check className="size-3 text-[#22c55e]" />
+              ) : (
+                <Copy className="size-3" />
+              )}
               {copied ? 'Copied' : 'Copy All'}
             </Button>
           </div>
-          <div className="flex-1 overflow-y-auto space-y-3 pr-2 rounded-2xl border border-white/5 bg-[#0f172a]/60 p-4">
+          <div className="flex-1 space-y-3 overflow-y-auto rounded-2xl border border-white/5 bg-[#0f172a]/60 p-4 pr-2">
             {history.length === 0 ? (
-              <div className="text-center text-xs text-zinc-500 py-12 italic font-mono">
-                No spoken turns yet. Speak or type to start recording the conversation.
+              <div className="py-12 text-center font-mono text-xs italic text-zinc-500">
+                No spoken turns yet. Speak or type to start recording the
+                conversation.
               </div>
             ) : (
               history.map((turn, i) => (
@@ -700,14 +1041,16 @@ const DirectVoiceSession: React.FC<{
                   key={i}
                   className={`rounded-xl p-3 text-xs ${
                     turn.role === 'user'
-                      ? 'border border-white/10 bg-white/5 ml-6'
-                      : 'border border-[#e85d04]/30 bg-[#e85d04]/10 mr-6'
+                      ? 'ml-6 border border-white/10 bg-white/5'
+                      : 'mr-6 border border-[#e85d04]/30 bg-[#e85d04]/10'
                   }`}
                 >
-                  <div className="font-mono text-[10px] uppercase text-zinc-400 mb-1">
+                  <div className="mb-1 font-mono text-[10px] uppercase text-zinc-400">
                     {turn.role === 'user' ? 'You' : agentName}
                   </div>
-                  <div className="text-zinc-200 leading-relaxed font-main">{turn.text}</div>
+                  <div className="font-main leading-relaxed text-zinc-200">
+                    {turn.text}
+                  </div>
                 </div>
               ))
             )}
@@ -715,9 +1058,9 @@ const DirectVoiceSession: React.FC<{
         </div>
       ) : (
         /* Visualizer Centerpiece */
-        <div className="flex flex-col items-center justify-center flex-1 py-4 bg-[#0a0f1e]/90 relative overflow-hidden">
+        <div className="relative flex flex-1 flex-col items-center justify-center overflow-hidden bg-[#0a0f1e]/90 py-4">
           {/* Subtle background glow */}
-          <div className="orb-orange -top-20 -right-20 size-64 opacity-20 pointer-events-none" />
+          <div className="orb-orange pointer-events-none -right-20 -top-20 size-64 opacity-20" />
 
           <VoiceVisualizer
             state={voiceState}
@@ -726,16 +1069,18 @@ const DirectVoiceSession: React.FC<{
           />
 
           {/* Live Conversation Transcript Feed */}
-          <div className="mt-2 w-full max-w-md px-6 text-center min-h-[72px] flex items-center justify-center relative z-10">
+          <div className="relative z-10 mt-2 flex min-h-[72px] w-full max-w-md items-center justify-center px-6 text-center">
             <AnimatePresence mode="wait">
               {agentText ? (
                 <motion.div
                   key="agent-text"
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="max-h-24 overflow-y-auto rounded-2xl border border-[#e85d04]/30 bg-[#0f172a]/90 p-3 text-sm text-zinc-100 w-full shadow-lg"
+                  className="max-h-24 w-full overflow-y-auto rounded-2xl border border-[#e85d04]/30 bg-[#0f172a]/90 p-3 text-sm text-zinc-100 shadow-lg"
                 >
-                  <div className="text-[10px] uppercase font-mono text-[#f48c06] mb-1">{agentName}</div>
+                  <div className="mb-1 font-mono text-[10px] uppercase text-[#f48c06]">
+                    {agentName}
+                  </div>
                   {agentText}
                 </motion.div>
               ) : userTranscript ? (
@@ -743,9 +1088,11 @@ const DirectVoiceSession: React.FC<{
                   key="user-text"
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="rounded-2xl border border-white/10 bg-[#0f172a]/90 p-3 text-sm text-zinc-200 w-full shadow-lg"
+                  className="w-full rounded-2xl border border-white/10 bg-[#0f172a]/90 p-3 text-sm text-zinc-200 shadow-lg"
                 >
-                  <div className="text-[10px] uppercase font-mono text-zinc-400 mb-1">You</div>
+                  <div className="mb-1 font-mono text-[10px] uppercase text-zinc-400">
+                    You
+                  </div>
                   {userTranscript}
                 </motion.div>
               ) : (
@@ -753,7 +1100,7 @@ const DirectVoiceSession: React.FC<{
                   key="status-msg"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  className="text-xs text-zinc-400 italic font-mono"
+                  className="font-mono text-xs italic text-zinc-400"
                 >
                   {statusMessage}
                 </motion.div>
@@ -762,30 +1109,36 @@ const DirectVoiceSession: React.FC<{
           </div>
 
           {/* Live Mic Level Feedback Indicator */}
-          <div className="mt-1 flex items-center gap-2 rounded-full border border-white/5 bg-[#0f172a]/60 px-3 py-1 text-[11px] font-mono text-zinc-400 relative z-10 shadow-sm">
-            <Mic className={`size-3 ${micVolume > 0.02 ? 'text-[#22c55e] animate-pulse' : 'text-zinc-500'}`} />
+          <div className="relative z-10 mt-1 flex items-center gap-2 rounded-full border border-white/5 bg-[#0f172a]/60 px-3 py-1 font-mono text-[11px] text-zinc-400 shadow-sm">
+            <Mic
+              className={`size-3 ${micVolume > 0.02 ? 'animate-pulse text-[#22c55e]' : 'text-zinc-500'}`}
+            />
             <span className="text-[10px] text-zinc-400">Input:</span>
             <div className="h-1.5 w-20 overflow-hidden rounded-full bg-white/10">
               <div
                 className="h-full bg-gradient-to-r from-[#22c55e] via-[#f48c06] to-[#dc2f02] transition-all duration-75"
-                style={{ width: `${Math.min(100, Math.max(4, micVolume * 100))}%` }}
+                style={{
+                  width: `${Math.min(100, Math.max(4, micVolume * 100))}%`
+                }}
               />
             </div>
-            <span className="text-[10px] text-zinc-500">{micVolume > 0.018 ? 'Voice Active' : 'Ready'}</span>
+            <span className="text-[10px] text-zinc-500">
+              {micVolume > 0.018 ? 'Voice Active' : 'Ready'}
+            </span>
           </div>
 
           {/* Push to talk hold button or text input */}
           {isPushToTalk ? (
-            <div className="mt-4 flex w-full max-w-xs justify-center relative z-10">
+            <div className="relative z-10 mt-4 flex w-full max-w-xs justify-center">
               <button
                 onMouseDown={handleManualPushToTalkStart}
                 onMouseUp={handleManualPushToTalkEnd}
                 onTouchStart={handleManualPushToTalkStart}
                 onTouchEnd={handleManualPushToTalkEnd}
-                className={`flex items-center gap-2 px-6 py-2.5 rounded-full font-medium text-xs transition-all shadow-lg select-none ${
+                className={`flex select-none items-center gap-2 rounded-full px-6 py-2.5 text-xs font-medium shadow-lg transition-all ${
                   isManualRecording
-                    ? 'bg-rose-600 text-white scale-95 ring-4 ring-rose-500/30'
-                    : 'bg-gradient-to-tr from-[#e85d04] to-[#f48c06] hover:brightness-110 text-white active:scale-95'
+                    ? 'scale-95 bg-rose-600 text-white ring-4 ring-rose-500/30'
+                    : 'bg-gradient-to-tr from-[#e85d04] to-[#f48c06] text-white hover:brightness-110 active:scale-95'
                 }`}
               >
                 <Mic className="size-4" />
@@ -793,7 +1146,7 @@ const DirectVoiceSession: React.FC<{
               </button>
             </div>
           ) : (
-            <div className="mt-4 flex w-full max-w-sm items-center gap-1.5 px-4 relative z-10">
+            <div className="relative z-10 mt-4 flex w-full max-w-sm items-center gap-1.5 px-4">
               <input
                 type="text"
                 placeholder="Ask with voice or type message..."
@@ -802,13 +1155,13 @@ const DirectVoiceSession: React.FC<{
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') handleSendPrompt(quickInput)
                 }}
-                className="h-9 w-full rounded-xl border border-white/10 bg-[#0f172a]/90 px-3 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#e85d04]/60"
+                className="h-9 w-full rounded-xl border border-white/10 bg-[#0f172a]/90 px-3 text-xs text-white placeholder:text-zinc-500 focus:border-[#e85d04]/60 focus:outline-none"
               />
               <Button
                 size="icon"
                 onClick={() => handleSendPrompt(quickInput)}
                 disabled={!quickInput.trim()}
-                className="size-9 rounded-xl bg-gradient-to-tr from-[#e85d04] to-[#f48c06] hover:brightness-110 text-white shrink-0"
+                className="size-9 shrink-0 rounded-xl bg-gradient-to-tr from-[#e85d04] to-[#f48c06] text-white hover:brightness-110"
               >
                 <Send className="size-3.5" />
               </Button>
@@ -853,7 +1206,9 @@ export const LiveKitVoiceModal: React.FC<LiveKitVoiceModalProps> = ({
       try {
         let res = await fetch('/api/livekit/token?room=voice-agent-room')
         if (!res.ok) {
-          res = await fetch(`${selectedEndpoint}/api/livekit/token?room=voice-agent-room`)
+          res = await fetch(
+            `${selectedEndpoint}/api/livekit/token?room=voice-agent-room`
+          )
         }
 
         if (res.ok) {
@@ -871,7 +1226,7 @@ export const LiveKitVoiceModal: React.FC<LiveKitVoiceModalProps> = ({
             return
           }
         }
-        
+
         // Default to direct streaming bridge if LiveKit Cloud URL isn't configured in env
         setUseFallbackMode(true)
       } catch (err) {
@@ -887,16 +1242,20 @@ export const LiveKitVoiceModal: React.FC<LiveKitVoiceModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-xl overflow-hidden border border-white/10 bg-[#0a0f1e] p-0 text-white shadow-2xl rounded-3xl backdrop-blur-2xl ring-1 ring-white/5">
+      <DialogContent className="max-w-xl overflow-hidden rounded-3xl border border-white/10 bg-[#0a0f1e] p-0 text-white shadow-2xl ring-1 ring-white/5 backdrop-blur-2xl">
         <DialogHeader className="sr-only">
           <DialogTitle>Realtime Voice Assistant</DialogTitle>
-          <DialogDescription>Interactive voice conversation session</DialogDescription>
+          <DialogDescription>
+            Interactive voice conversation session
+          </DialogDescription>
         </DialogHeader>
 
         {isLoading ? (
           <div className="flex h-[480px] flex-col items-center justify-center gap-4 bg-[#0a0f1e]">
             <RefreshCw className="size-8 animate-spin text-[#f48c06]" />
-            <div className="text-sm font-medium text-zinc-300 font-mono">Initializing Voice Session...</div>
+            <div className="font-mono text-sm font-medium text-zinc-300">
+              Initializing Voice Session...
+            </div>
           </div>
         ) : useFallbackMode || !token || !wsUrl ? (
           <DirectVoiceSession onDisconnect={onClose} agentName={agentName} />

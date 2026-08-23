@@ -101,37 +101,69 @@ FORMATTING RULES (CRITICAL):
 - NO brackets or parentheticals: do NOT write [pause], (smiling), [clears throat], etc.
 - NO stage directions or emojis.
 - Write as if you are writing a script for someone else to read aloud verbatim.
+- Use line breaks in lists when needed.
 
 RESPONSE GUIDELINES:
-- Keep most responses to 1-2 short, natural sentences (typically under 120 characters, max 300 characters when detail is requested).
+- Keep most responses to 1-2 short, natural sentences (under 120 characters, max 300 when detail is requested).
 - You have instant access to information. Never say "Let me check", "One moment", or "Hold on" — respond directly as if the information is already in front of you.
-- End responses with a clear question or prompt to keep the conversation flowing smoothly.
+- Pause after questions to allow for replies. Confirm what the customer said if uncertain. Never interrupt.
+- End responses with a clear question or prompt to keep the conversation flowing smoothly when appropriate.
 - Speak in natural, flowing conversational sentences instead of lists.
 
-## 1. ROLE AND IDENTITY
-You are Brooke, an AI virtual assistant speaking with users over a real-time voice call. You help callers quickly find accurate, practical information across a wide range of everyday topics. A successful call ends with the user getting their answer clearly and concisely, or being guided to the right next step.
+#Role
+You are a general-purpose virtual assistant speaking to users over the phone. Your task is to help them find accurate, helpful information across a wide range of everyday topics.
 
-## 2. PERSONALITY AND TONE
-Warm, friendly, confident, and professional. Match the caller's pace. Never rushed, never robotic, never overly verbose.
+#General Guidelines
+-Be warm, friendly, and professional.
+-Speak clearly and naturally in plain language.
+-Keep most responses to 1-2 sentences and under 120 characters unless the caller asks for more detail (max: 300 characters).
+-Do not use markdown formatting, like code blocks, quotes, bold, links, or italics.
+-Use line breaks in lists.
+-Use varied phrasing; avoid repetition.
+-If unclear, ask for clarification.
+-If the user's message is empty, respond with an empty message.
+-If asked about your well-being, respond briefly and kindly.
 
-## 3. ENVIRONMENT AND CHANNEL
-This is a live voice stream over a web and mobile connection. Audio quality may vary and background noise may occur. If a request is unclear, politely ask the caller to confirm or repeat rather than guessing.
+#Voice-Specific Instructions
+-Speak in a conversational tone—your responses will be spoken aloud.
+-Pause after questions to allow for replies.
+-Confirm what the customer said if uncertain.
+-Never interrupt.
 
-## 4. ABOUT YOUR CALLERS
-Callers are looking for quick, direct answers to everyday questions, guidance, and assistance. Speak in simple, accessible language.
+#Style
+-Use active listening cues.
+-Be warm and understanding, but concise.
+-Use simple words unless the caller uses technical terms.
 
-## 5. SCOPE
-You help with quick facts, everyday science, technology, common knowledge, and general assistance.
-If asked about formal medical, legal, or financial advice, respond with: "I am not qualified to provide advice on that, but I recommend reaching out to a licensed professional."
+#Call Flow Objective
+-Greet the caller and introduce yourself:
+"Hi there, I'm your virtual assistant—how can I help today?"
+-Your primary goal is to help users quickly find the information they're looking for. This may include:
+Quick facts: "The capital of Japan is Tokyo."
+Weather: "It's currently 68 degrees and cloudy in Seattle."
+Local info: "There's a pharmacy nearby open until 9 PM."
+Basic how-to guidance: "To restart your phone, hold the power button for 5 seconds."
+FAQs: "Most returns are accepted within 30 days with a receipt."
+Navigation help: "Can you tell me the address or place you're trying to reach?"
+-If the request is unclear:
+"Just to confirm, did you mean...?" or "Can you tell me a bit more?"
+-If the request is out of scope (e.g. legal, financial, or medical advice):
+"I'm not able to provide advice on that, but I can help you find someone who can."
 
-## 6. CONVERSATIONAL APPROACH
-- Greet the user warmly if they greet you.
-- If the request is unclear, gently clarify: "Just to confirm, did you mean...?"
-- If the user asks how you are doing, reply briefly and kindly.
-- When wrapping up, ask: "Is there anything else I can help you with today?"
-- Close with: "Thanks for speaking with me. Have a wonderful day!"
+#Off-Scope Questions
+-If asked about sensitive topics like health, legal, or financial matters:
+"I'm not qualified to answer that, but I recommend reaching out to a licensed professional."
 
-## 7. SPEAKING STYLE AND PRONUNCIATION
+#User Considerations
+-Callers may be in a rush, distracted, or unsure how to phrase their question. Stay calm, helpful, and clear—especially when the user seems stressed, confused, or overwhelmed.
+
+#Closing
+-Always ask:
+"Is there anything else I can help you with today?"
+-Then thank them warmly and say:
+"Thanks for calling. Take care and have a great day!"
+
+#SPEAKING STYLE AND PRONUNCIATION
 - Read dates in spoken form ("Tuesday, March fifteenth"), not numerical ("3/15").
 - Read times in twelve-hour format ("three PM").
 - Read numbers and abbreviations naturally.
@@ -230,7 +262,7 @@ async def generate_livekit_token(
         token = api.AccessToken(api_key=api_key, api_secret=api_secret) \
             .with_identity(user_identity) \
             .with_name(user_name) \
-            .with_grants(api.VideoGrants(room_join=True, room=room, can_publish=True, can_subscribe=True)) \
+            .with_grants(api.VideoGrants(room_join=True, room=room, can_publish=True, can_subscribe=True, can_publish_data=True)) \
             .to_jwt()
 
         return {
@@ -244,10 +276,31 @@ async def generate_livekit_token(
         raise HTTPException(status_code=500, detail=f"Failed to create LiveKit token: {str(e)}")
 
 # ---------------------------------------------------------------------------
-# Deepgram Nova-3 Speech-to-Text (STT) Endpoint
+# Deepgram Flux-General Speech-to-Text (STT) Endpoint — 48k linear16 primary
 # ---------------------------------------------------------------------------
+# Helper to check if a Deepgram websockets connection is open (handles websockets 13+ vs older)
+def _is_dg_open(ws) -> bool:
+    if ws is None:
+        return False
+    try:
+        if hasattr(ws, "state"):
+            # websockets 13+ uses State.OPEN
+            try:
+                return ws.state == websockets.protocol.State.OPEN
+            except Exception:
+                # Some forks expose .state as int/str
+                return str(getattr(ws, "state", "")) == "State.OPEN" or getattr(ws, "open", False)
+        if hasattr(ws, "open"):
+            return bool(ws.open)
+        if hasattr(ws, "closed"):
+            return not bool(ws.closed)
+    except Exception:
+        return False
+    return True
+
+
 async def transcribe_audio_bytes(audio_bytes: bytes, content_type: str = "audio/wav") -> str:
-    """Helper to transcribe raw audio bytes using Deepgram Nova-3."""
+    """Helper to transcribe raw audio bytes using Deepgram Flux-General (48k) with Nova-3 fallback."""
     if not DEEPGRAM_API_KEY:
         raise ValueError("DEEPGRAM_API_KEY is not configured")
     
@@ -264,14 +317,26 @@ async def transcribe_audio_bytes(audio_bytes: bytes, content_type: str = "audio/
         clean_content_type = content_type.split(";")[0].strip() or "audio/wav"
     
     async with httpx.AsyncClient(timeout=30.0) as client:
+        # Primary: flux-general-en (matches Settings.listen, 48k input) — best for conversational VAD
         dg_res = await client.post(
-            "https://api.deepgram.com/v1/listen?model=nova-3&smart_format=true",
+            "https://api.deepgram.com/v1/listen?model=flux-general-en&smart_format=true&language=en-US",
             headers={
                 "Authorization": f"Token {DEEPGRAM_API_KEY}",
                 "Content-Type": clean_content_type
             },
             content=audio_bytes
         )
+        # Fallback to nova-3 if flux model unavailable on account/region
+        if dg_res.status_code != 200 and "flux" in dg_res.text.lower():
+            print(f"[STT] flux-general-en failed ({dg_res.status_code}), falling back to nova-3")
+            dg_res = await client.post(
+                "https://api.deepgram.com/v1/listen?model=nova-3&smart_format=true",
+                headers={
+                    "Authorization": f"Token {DEEPGRAM_API_KEY}",
+                    "Content-Type": clean_content_type
+                },
+                content=audio_bytes
+            )
         
         if dg_res.status_code != 200:
             print(f"Deepgram STT error ({clean_content_type}): {dg_res.status_code} {dg_res.text}")
@@ -301,6 +366,8 @@ async def speech_to_text(request: Request):
 
 # ---------------------------------------------------------------------------
 # Realtime Deepgram Voice WebSocket Bridge (Single WebSocket Audio + Text)
+# Agno think (no Deepgram think) — Deepgram is pure STT/TTS, AgentOS is the LLM.
+# Borrowed pattern from Deepgram FastAPI example: persistent DG TTS WS + coalesced Speak + jitter-aware relay.
 # ---------------------------------------------------------------------------
 @base_app.websocket("/ws/voice")
 async def voice_websocket(client_ws: WebSocket):
@@ -320,127 +387,285 @@ async def voice_websocket(client_ws: WebSocket):
             print(f"[WS Voice] Failed to pre-connect Deepgram Flux TTS: {e}")
             dg_ws = None
 
-    try:
-        while True:
-            message = await client_ws.receive()
-            user_message = ""
-            session_id = None
+    # Turn task handling with interrupt concurrency — allows barge-in while TTS is streaming
+    turn_task: Optional[asyncio.Task] = None
 
-            if "bytes" in message and message["bytes"]:
-                raw_bytes = message["bytes"]
-                user_message = await transcribe_audio_bytes(raw_bytes, "audio/wav")
-                if not user_message:
-                    await client_ws.send_json({"type": "no_speech"})
-                    await client_ws.send_json({"type": "turn_complete"})
-                    continue
-                await client_ws.send_json({"type": "user_transcript", "text": user_message})
-
-            elif "text" in message and message["text"]:
-                raw_text = message["text"]
-                try:
-                    data = json.loads(raw_text)
-                    msg_type = data.get("type", "text")
-                    session_id = data.get("session_id", None)
-
-                    if msg_type == "audio" and "audio" in data:
-                        import base64
-                        mime = data.get("mime_type", "audio/webm")
-                        audio_bytes = base64.b64decode(data["audio"])
-                        user_message = await transcribe_audio_bytes(audio_bytes, mime)
-                        if not user_message:
-                            await client_ws.send_json({"type": "no_speech"})
-                            await client_ws.send_json({"type": "turn_complete"})
-                            continue
-                        await client_ws.send_json({"type": "user_transcript", "text": user_message})
-                    elif msg_type == "ping":
-                        await client_ws.send_json({"type": "pong"})
-                        continue
-                    else:
-                        user_message = data.get("text", raw_text)
-                except Exception:
-                    user_message = raw_text
-
-            if not user_message or not user_message.strip():
-                continue
-
-            print(f"\nUser [Voice Turn]: {user_message}")
-
-            if not DEEPGRAM_API_KEY:
-                reply = f"Deepgram API key not configured. Echo: {user_message}"
-                await client_ws.send_json({"type": "agent_text", "text": reply})
-                await client_ws.send_json({"type": "turn_complete"})
-                continue
-
-            # Ensure Deepgram TTS WebSocket is connected
-            is_open = dg_ws is not None and getattr(dg_ws, "state", None) == websockets.protocol.State.OPEN
-            if not is_open:
-                try:
-                    dg_ws = await websockets.connect(dg_url, additional_headers=dg_headers)
-                    await dg_ws.recv() # Read initial Connected event
-                except Exception as e:
-                    print(f"[WS Voice] Reconnect Deepgram TTS failed: {e}")
-                    await client_ws.send_json({"type": "error", "message": f"TTS connect failed: {e}"})
-                    await client_ws.send_json({"type": "turn_complete"})
-                    continue
-
+    async def handle_turn(user_message: str, session_id: Optional[str]):
+        # Ensure Deepgram TTS WebSocket is connected (robust helper)
+        nonlocal dg_ws
+        if not _is_dg_open(dg_ws):
             try:
-                async def stream_agno_to_deepgram():
-                    try:
-                        async for chunk in voice_agent.arun(user_message, session_id=session_id, stream=True):
-                            content = getattr(chunk, "content", None)
-                            if content:
-                                await dg_ws.send(json.dumps({
-                                    "type": "Speak",
-                                    "text": content
-                                }))
-                                await client_ws.send_json({
-                                    "type": "agent_text",
-                                    "text": content
-                                })
-                        
-                        await dg_ws.send(json.dumps({"type": "Flush"}))
-                    except Exception as e:
-                        print(f"Error streaming Agno to Deepgram: {e}")
-                        await client_ws.send_json({"type": "error", "message": str(e)})
-
-                async def stream_deepgram_to_client():
-                    try:
-                        while True:
-                            msg = await dg_ws.recv()
-                            if isinstance(msg, bytes):
-                                await client_ws.send_bytes(msg)
-                            elif isinstance(msg, str):
-                                parsed = json.loads(msg)
-                                event_type = parsed.get("type")
-                                if event_type == "SpeechMetadata":
-                                    await client_ws.send_json({"type": "turn_complete"})
-                                    break
-                                elif event_type == "Error":
-                                    print(f"[Deepgram TTS Error Event] {parsed}")
-                                    await client_ws.send_json({"type": "turn_complete"})
-                                    break
-                    except Exception as e:
-                        print(f"Error streaming Deepgram to client: {e}")
-
-                await asyncio.gather(
-                    stream_agno_to_deepgram(),
-                    stream_deepgram_to_client()
-                )
+                dg_ws = await websockets.connect(dg_url, additional_headers=dg_headers)
+                welcome = await dg_ws.recv()  # Read initial Connected event
+                print(f"[WS Voice] Reconnected Deepgram Flux TTS: {welcome}")
             except Exception as e:
-                print(f"[WS Voice] Turn processing error: {e}")
+                print(f"[WS Voice] Reconnect Deepgram TTS failed: {e}")
+                await client_ws.send_json({"type": "error", "message": f"TTS connect failed: {e}"})
+                await client_ws.send_json({"type": "turn_complete"})
+                return
+        try:
+            # Coalesced Speak streaming: reduces glitch from per-token Speak flood, keeps jitter low.
+            async def stream_agno_to_deepgram():
+                speak_buffer = ""
+                prev_ends_with_space = True
+                last_send = asyncio.get_event_loop().time()
+
+                async def _flush_speak(force: bool = False):
+                    nonlocal speak_buffer, prev_ends_with_space, last_send
+                    if not speak_buffer:
+                        return
+                    if not force and len(speak_buffer) < 24:
+                        if speak_buffer.strip() and speak_buffer.strip()[-1] not in ".!?":
+                            return
+                    text_to_send = speak_buffer
+                    if not prev_ends_with_space and text_to_send and not text_to_send[0].isspace() and text_to_send[0] not in ".,!?;:')\"":
+                        text_to_send = " " + text_to_send
+                    prev_ends_with_space = text_to_send.endswith((" ", "\n", "\t")) if text_to_send else prev_ends_with_space
+                    try:
+                        await dg_ws.send(json.dumps({"type": "Speak", "text": text_to_send}))
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as se:
+                        print(f"[WS Voice] Speak send failed: {se}")
+                    speak_buffer = ""
+                    last_send = asyncio.get_event_loop().time()
+
+                try:
+                    async for chunk in voice_agent.arun(user_message, session_id=session_id, stream=True):
+                        content = getattr(chunk, "content", None)
+                        if content:
+                            await client_ws.send_json({"type": "agent_text", "text": content})
+                            speak_buffer += content
+                            now = asyncio.get_event_loop().time()
+                            should_flush = (
+                                len(speak_buffer) >= 80
+                                or speak_buffer.strip().endswith((".", "!", "?", ":", ";"))
+                                or (len(speak_buffer) >= 24 and (now - last_send) > 0.06 and " " in speak_buffer)
+                            )
+                            if should_flush:
+                                await _flush_speak(force=False)
+                    if speak_buffer:
+                        await _flush_speak(force=True)
+                    # Only Flush if not cancelled
+                    try:
+                        await dg_ws.send(json.dumps({"type": "Flush"}))
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as fe:
+                        print(f"[WS Voice] Flush failed: {fe}")
+                except asyncio.CancelledError:
+                    print("[WS Voice] stream_agno cancelled by interrupt")
+                    try:
+                        await dg_ws.send(json.dumps({"type": "Interrupt"}))
+                    except Exception:
+                        pass
+                    raise
+                except Exception as e:
+                    print(f"Error streaming Agno to Deepgram: {e}")
+                    try:
+                        await client_ws.send_json({"type": "error", "message": str(e)})
+                    except Exception:
+                        pass
+
+            async def stream_deepgram_to_client():
+                try:
+                    while True:
+                        msg = await dg_ws.recv()
+                        if isinstance(msg, bytes):
+                            if len(msg) < 960:
+                                continue
+                            await client_ws.send_bytes(msg)
+                        elif isinstance(msg, str):
+                            parsed = json.loads(msg)
+                            event_type = parsed.get("type")
+                            if event_type in ("SpeechMetadata", "Flushed"):
+                                if event_type == "Flushed":
+                                    continue
+                                await client_ws.send_json({"type": "turn_complete"})
+                                break
+                            elif event_type == "SpeechInterrupted":
+                                print(f"[Deepgram TTS Interrupted] {parsed}")
+                                await client_ws.send_json({"type": "turn_complete"})
+                                break
+                            elif event_type == "Error":
+                                print(f"[Deepgram TTS Error Event] {parsed}")
+                                await client_ws.send_json({"type": "error", "message": parsed.get("description", str(parsed))})
+                                await client_ws.send_json({"type": "turn_complete"})
+                                break
+                            elif event_type == "Warning":
+                                print(f"[Deepgram TTS Warning] {parsed}")
+                except asyncio.CancelledError:
+                    print("[WS Voice] stream_deepgram cancelled by interrupt")
+                    raise
+                except Exception as e:
+                    print(f"Error streaming Deepgram to client: {e}")
+
+            await asyncio.gather(stream_agno_to_deepgram(), stream_deepgram_to_client())
+        except asyncio.CancelledError:
+            print("[WS Voice] Turn cancelled")
+            try:
+                await client_ws.send_json({"type": "turn_complete"})
+            except Exception:
+                pass
+            raise
+        except Exception as e:
+            print(f"[WS Voice] Turn processing error: {e}")
+            try:
                 await client_ws.send_json({"type": "error", "message": f"Turn error: {str(e)}"})
                 await client_ws.send_json({"type": "turn_complete"})
+            except Exception:
+                pass
+
+    try:
+        recv_task = asyncio.create_task(client_ws.receive())
+        while True:
+            # Wait for either next client message or current turn completion
+            wait_tasks = [recv_task]
+            if turn_task and not turn_task.done():
+                wait_tasks.append(turn_task)
+            done, _ = await asyncio.wait(wait_tasks, return_when=asyncio.FIRST_COMPLETED)
+
+            if recv_task in done:
+                try:
+                    message = recv_task.result()
+                except WebSocketDisconnect:
+                    print("Voice WebSocket client disconnected (recv)")
+                    if turn_task and not turn_task.done():
+                        turn_task.cancel()
+                        try:
+                            await turn_task
+                        except asyncio.CancelledError:
+                            pass
+                    break
+                except Exception as e:
+                    print(f"Voice WS recv error: {e}")
+                    recv_task = asyncio.create_task(client_ws.receive())
+                    continue
+                # Schedule next recv immediately
+                recv_task = asyncio.create_task(client_ws.receive())
+
+                user_message = ""
+                session_id = None
+                is_interrupt = False
+
+                if "bytes" in message and message["bytes"]:
+                    raw_bytes = message["bytes"]
+                    user_message = await transcribe_audio_bytes(raw_bytes, "audio/wav")
+                    if not user_message:
+                        await client_ws.send_json({"type": "no_speech"})
+                        await client_ws.send_json({"type": "turn_complete"})
+                        continue
+                    await client_ws.send_json({"type": "user_transcript", "text": user_message})
+                elif "text" in message and message["text"]:
+                    raw_text = message["text"]
+                    try:
+                        data = json.loads(raw_text)
+                        msg_type = data.get("type", "text")
+                        session_id = data.get("session_id", None)
+                        if msg_type == "audio" and "audio" in data:
+                            import base64
+                            mime = data.get("mime_type", "audio/webm")
+                            audio_bytes = base64.b64decode(data["audio"])
+                            user_message = await transcribe_audio_bytes(audio_bytes, mime)
+                            if not user_message:
+                                await client_ws.send_json({"type": "no_speech"})
+                                await client_ws.send_json({"type": "turn_complete"})
+                                continue
+                            await client_ws.send_json({"type": "user_transcript", "text": user_message})
+                        elif msg_type in ("ping", "keepalive", "keepAlive"):
+                            await client_ws.send_json({"type": "pong"})
+                            continue
+                        elif msg_type in ("interrupt", "Interrupt", "barge-in", "barge_in", "stop"):
+                            is_interrupt = True
+                        else:
+                            user_message = data.get("text", raw_text)
+                    except Exception:
+                        # Fallback: treat raw_text as user message
+                        try:
+                            # Check if it's still an interrupt JSON that failed parse? already handled
+                            user_message = raw_text
+                        except Exception:
+                            user_message = raw_text
+
+                if is_interrupt:
+                    print("[WS Voice] Interrupt received — cancelling current turn")
+                    if turn_task and not turn_task.done():
+                        turn_task.cancel()
+                        try:
+                            await turn_task
+                        except asyncio.CancelledError:
+                            pass
+                        turn_task = None
+                    # Also signal Deepgram to stop current synthesis
+                    if _is_dg_open(dg_ws):
+                        try:
+                            await dg_ws.send(json.dumps({"type": "Interrupt"}))
+                        except Exception as ie:
+                            print(f"[WS Voice] Interrupt send failed: {ie}")
+                    await client_ws.send_json({"type": "interrupted"})
+                    # Also ensure we send turn_complete so frontend can reset, if not already sent by cancelled turn
+                    # The cancelled turn's handler already sent turn_complete; this is extra safety
+                    continue
+
+                if not user_message or not user_message.strip():
+                    continue
+
+                print(f"\nUser [Voice Turn]: {user_message}")
+
+                if not DEEPGRAM_API_KEY:
+                    reply = f"Deepgram API key not configured. Echo: {user_message}"
+                    await client_ws.send_json({"type": "agent_text", "text": reply})
+                    await client_ws.send_json({"type": "turn_complete"})
+                    continue
+
+                # If previous turn still running (should not happen without interrupt), cancel it
+                if turn_task and not turn_task.done():
+                    print("[WS Voice] New turn while previous running — cancelling previous")
+                    turn_task.cancel()
+                    try:
+                        await turn_task
+                    except asyncio.CancelledError:
+                        pass
+                    turn_task = None
+                    if _is_dg_open(dg_ws):
+                        try:
+                            await dg_ws.send(json.dumps({"type": "Interrupt"}))
+                        except Exception:
+                            pass
+
+                turn_task = asyncio.create_task(handle_turn(user_message, session_id))
+
+            if turn_task and turn_task in done:
+                try:
+                    await turn_task
+                except asyncio.CancelledError:
+                    print("[WS Voice] Turn task cancelled (done)")
+                except Exception as e:
+                    print(f"[WS Voice] Turn task error: {e}")
+                turn_task = None
 
     except WebSocketDisconnect:
         print("Voice WebSocket client disconnected")
     except Exception as e:
         print(f"Voice WebSocket error: {e}")
     finally:
-        if dg_ws is not None and getattr(dg_ws, "state", None) == websockets.protocol.State.OPEN:
+        if 'recv_task' in locals() and recv_task and not recv_task.done():
+            recv_task.cancel()
             try:
-                await dg_ws.close()
-            except Exception:
+                await recv_task
+            except asyncio.CancelledError:
                 pass
+        if turn_task and not turn_task.done():
+            turn_task.cancel()
+            try:
+                await turn_task
+            except asyncio.CancelledError:
+                pass
+        try:
+            if _is_dg_open(dg_ws):
+                await dg_ws.close()
+        except Exception:
+            pass
 
 # ---------------------------------------------------------------------------
 # Deepgram Native Voice Agent WebSocket Bridge (wss://agent.deepgram.com)
@@ -463,6 +688,8 @@ async def deepgram_agent_websocket(client_ws: WebSocket):
             welcome = await dg_ws.recv()
             print(f"[Deepgram Agent] Welcome: {welcome}")
 
+            # Settings without think — pure listen/speak transport, think handled by Agno / client
+            # Aligned to user's approved Settings: 48k in, flux-general-en listen, flux-brooke-en speak
             settings = {
                 "type": "Settings",
                 "audio": {
@@ -480,15 +707,8 @@ async def deepgram_agent_websocket(client_ws: WebSocket):
                     "listen": {
                         "provider": {
                             "type": "deepgram",
-                            "model": "nova-3"
+                            "model": "flux-general-en"
                         }
-                    },
-                    "think": {
-                        "provider": {
-                            "type": "open_ai",
-                            "model": "gpt-4o-mini"
-                        },
-                        "prompt": "You are a helpful, fast, natural conversational voice assistant. Keep answers concise (1-2 sentences) and suitable for direct speech output."
                     },
                     "speak": {
                         "provider": {
@@ -497,7 +717,8 @@ async def deepgram_agent_websocket(client_ws: WebSocket):
                             "model": "flux-brooke-en"
                         }
                     }
-                }
+                },
+                "greeting": "Hello! How may I help you?"
             }
 
             await dg_ws.send(json.dumps(settings))
@@ -506,6 +727,21 @@ async def deepgram_agent_websocket(client_ws: WebSocket):
             if isinstance(conf_resp, str):
                 await client_ws.send_text(conf_resp)
 
+            # KeepAlive task: Deepgram agent expects KeepAlive every ~5s when idle
+            async def keepalive_loop():
+                try:
+                    while True:
+                        await asyncio.sleep(5)
+                        if _is_dg_open(dg_ws):
+                            try:
+                                await dg_ws.send(json.dumps({"type": "KeepAlive"}))
+                            except Exception:
+                                break
+                        else:
+                            break
+                except asyncio.CancelledError:
+                    pass
+
             async def forward_client_to_deepgram():
                 try:
                     while True:
@@ -513,6 +749,7 @@ async def deepgram_agent_websocket(client_ws: WebSocket):
                         if "bytes" in msg and msg["bytes"]:
                             await dg_ws.send(msg["bytes"])
                         elif "text" in msg and msg["text"]:
+                            # Forward JSON controls (Interrupt, KeepAlive proxied) verbatim
                             await dg_ws.send(msg["text"])
                 except WebSocketDisconnect:
                     pass
@@ -529,10 +766,18 @@ async def deepgram_agent_websocket(client_ws: WebSocket):
                 except Exception as e:
                     print(f"Error deepgram->client: {e}")
 
-            await asyncio.gather(
-                forward_client_to_deepgram(),
-                forward_deepgram_to_client()
-            )
+            ka_task = asyncio.create_task(keepalive_loop())
+            try:
+                await asyncio.gather(
+                    forward_client_to_deepgram(),
+                    forward_deepgram_to_client()
+                )
+            finally:
+                ka_task.cancel()
+                try:
+                    await ka_task
+                except asyncio.CancelledError:
+                    pass
 
     except WebSocketDisconnect:
         print("Deepgram Direct Agent client disconnected")

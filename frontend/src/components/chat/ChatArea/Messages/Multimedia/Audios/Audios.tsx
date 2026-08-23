@@ -1,6 +1,6 @@
 'use client'
 
-import { memo, useMemo } from 'react'
+import { memo, useEffect, useMemo } from 'react'
 
 import { type AudioData } from '@/types/os'
 import { decodeBase64Audio } from '@/lib/audio'
@@ -24,12 +24,23 @@ const AudioItem = memo(({ audio }: { audio: AudioData }) => {
       return decodeBase64Audio(
         audio.content,
         'audio/pcm16',
-        audio.sample_rate,
-        audio.channels
+        audio.sample_rate || 24000,
+        audio.channels || 1
       )
     }
     return null
   }, [audio])
+
+  // Revoke object URLs created from base64 to avoid memory leak
+  useEffect(() => {
+    return () => {
+      if (audioUrl && audioUrl.startsWith('blob:')) {
+        try {
+          URL.revokeObjectURL(audioUrl)
+        } catch {}
+      }
+    }
+  }, [audioUrl])
 
   if (!audioUrl) return null
 

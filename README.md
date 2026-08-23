@@ -67,41 +67,43 @@ voice-agent/
 
 ---
 
-### 2. Start the Backend
+### 2. Start Everything (One Command)
 
-In a new terminal:
-
-```bash
-cd backend
-
-# Using uv (recommended)
-uv run python server.py
-
-# Or using standard python
-python server.py
-```
-
-- Server starts at: `http://localhost:7777`
-- Health check: `http://localhost:7777/api/info`
-- Interactive API Docs: `http://localhost:7777/docs`
-
----
-
-### 3. Start the Frontend
-
-In another terminal:
+Unified runner starts **backend + LiveKit worker** together (effective live voice chat needs both):
 
 ```bash
-cd frontend
+# Backend (7777) + LiveKit worker (flux-brooke-en) — recommended
+npm run dev
+# or
+python scripts/run.py
+bash scripts/run.sh
 
-# Install dependencies (pnpm or npm)
-pnpm install
+# Backend + Worker + Frontend (7777 + LiveKit + 3000)
+npm run dev:all
+# or
+python scripts/run.py --with-frontend
+bash scripts/run.sh --with-frontend
 
-# Start Next.js development server
-pnpm dev
+# Individual services still work:
+npm run dev:backend   # only FastAPI + Deepgram Flux WS
+npm run dev:worker    # only LiveKit worker (needs backend)
+npm run dev:frontend  # only Next.js UI
 ```
 
-- Web UI starts at: `http://localhost:3000`
+- Backend: `http://localhost:7777` — health `/api/info`, docs `/docs`, voice WS `/ws/voice`
+- LiveKit worker: joins `voice-agent-room` via `LIVEKIT_URL` (fallback to Direct WS bridge if not set)
+- Frontend: `http://localhost:3000` (when using `--with-frontend`)
+
+Or manually in separate terminals:
+
+```bash
+# Terminal 1 — Backend
+cd backend && uv run python server.py
+# Terminal 2 — LiveKit worker
+cd backend && uv run python livekit_worker.py dev
+# Terminal 3 — Frontend
+cd frontend && pnpm dev
+```
 
 ---
 

@@ -270,15 +270,16 @@ async def deepgram_transcribe_file(
 @mcp.tool()
 async def deepgram_speak(
     text: str,
-    model: str = "aura-luna-en",
+    model: str = "flux-brooke-en",
     output_path: str = "agent_response.mp3",
 ) -> str:
     """
     Synthesize speech via Deepgram TTS (mirrors voice.py:44 speak.v1.audio.generate).
+    Unified voice: flux-brooke-en (Flux v2) — streaming. Aura models use v1.
 
     Args:
         text: Plain text to synthesize (keep under 2000 chars; voice-optimized, no markdown).
-        model: TTS model (aura-luna-en default, also aura-asteria-en, aura-luna-en, flux variants).
+        model: TTS model (flux-brooke-en default, also aura-asteria-en, aura-luna-en, flux variants).
         output_path: Where to save audio (default agent_response.mp3 at workspace root).
     Returns:
         Saved file path or error. Also returns base64 preview when file < 1MB.
@@ -530,7 +531,7 @@ def livekit_create_token(
             api.AccessToken(api_key=lk_key, api_secret=lk_secret)
             .with_identity(ident)
             .with_name(disp)
-            .with_grants(api.VideoGrants(room_join=True, room=room, can_publish=True, can_subscribe=True))
+            .with_grants(api.VideoGrants(room_join=True, room=room, can_publish=True, can_subscribe=True, can_publish_data=True))
             .to_jwt()
         )
         return json.dumps({"token": token, "url": lk_url, "room": room, "identity": ident, "name": disp}, indent=2)
