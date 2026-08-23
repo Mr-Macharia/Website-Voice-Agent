@@ -1,0 +1,69 @@
+# ===========================================================================
+# Git Ignore Configuration
+# ===========================================================================
+
+# --- Environment & Secret Files ---
+.env
+.env.local
+.env.*.local
+*.env
+backend/.env
+frontend/.env.local
+!.env.example
+!*.env.example
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+/.venv/
+/backend/.venv/
+/venv/
+/ENV/
+/env/
+develop-eggs/
+/dist/
+/build/
+downloads/
+eggs/
+.eggs/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# --- Database & Audio Artifacts ---
+*.db
+*.sqlite
+*.sqlite3
+*.mp3
+*.wav
+*.webm
+*.ogg
+
+# --- Node & Frontend Dependencies ---
+node_modules/
+frontend/node_modules/
+.pnpm-debug.log*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# --- Next.js Build Output ---
+.next/
+frontend/.next/
+/out/
+/frontend/out/
+*.tsbuildinfo
+
+# --- OS & IDE Metadata ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json

@@ -1,0 +1,36 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "deepgram": {
+      "type": "local",
+      "command": ["dg", "mcp"],
+      "environment": {
+        "DEEPGRAM_API_KEY": "{env:DEEPGRAM_API_KEY}"
+      },
+      "enabled": true
+    },
+    "agno-docs": {
+      "type": "remote",
+      "url": "https://docs.agno.com/mcp",
+      "enabled": true
+    },
+    "livekit-docs": {
+      "type": "remote",
+      "url": "https://docs.livekit.io/mcp/",
+      "enabled": true
+    },
+    "voice-agent": {
+      "type": "local",
+      "command": ["uv", "run", "python", "backend/voice_mcp/voice_agent_server.py"],
+      "environment": {
+        "DEEPGRAM_API_KEY": "{env:DEEPGRAM_API_KEY}",
+        "LIVEKIT_URL": "{env:LIVEKIT_URL}",
+        "LIVEKIT_API_KEY": "{env:LIVEKIT_API_KEY}",
+        "LIVEKIT_API_SECRET": "{env:LIVEKIT_API_SECRET}",
+        "XAI_API_KEY": "{env:XAI_API_KEY}",
+        "OPENAI_API_KEY": "{env:OPENAI_API_KEY}"
+      },
+      "enabled": true
+    }
+  }
+}
