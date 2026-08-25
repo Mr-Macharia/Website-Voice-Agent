@@ -20,7 +20,18 @@ import { Button } from '@/components/ui/button'
 import { useStore } from '@/store'
 import VoiceVisualizer, { VoiceState } from './VoiceVisualizer'
 import VoiceAgentControlBar from './VoiceAgentControlBar'
-import { RefreshCw, Send, Mic, Copy, Check, MessageSquare } from 'lucide-react'
+import {
+  RefreshCw,
+  Send,
+  Mic,
+  Copy,
+  Check,
+  MessageSquare,
+  X,
+  Radio,
+  Zap,
+  Sparkles
+} from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 
@@ -77,38 +88,72 @@ const LiveKitVoiceSession: React.FC<{
   }
 
   return (
-    <div className="flex h-[540px] w-full flex-col justify-between">
+    <div className="flex h-[680px] max-h-[88vh] w-full flex-col justify-between bg-[#0a0f1e]">
       <RoomAudioRenderer />
 
       {/* Top Status Header */}
-      <div className="flex items-center justify-between border-b border-white/5 px-6 py-3">
-        <div className="flex items-center gap-2">
-          <span className="flex size-2.5 animate-pulse rounded-full bg-emerald-400" />
-          <span className="font-mono text-xs text-zinc-300">
-            LiveKit Room: {room.name || 'Connected'}
+      <div className="flex items-center justify-between border-b border-white/10 bg-[#0a0f1e]/95 px-7 py-4 backdrop-blur-2xl">
+        <div className="flex items-center gap-3">
+          <span className="relative flex size-2.5">
+            <span className="size-full animate-ping rounded-full bg-sky-400 opacity-75" />
+            <span className="absolute inset-0 size-2.5 rounded-full bg-sky-500 shadow-[0_0_8px_#38bdf8]" />
           </span>
+          <div className="flex items-center gap-2">
+            <Radio className="size-4 text-sky-400" />
+            <span className="font-mono text-xs font-medium text-zinc-200">
+              LiveKit WebRTC
+            </span>
+            <span className="rounded-full border border-sky-500/20 bg-sky-500/10 px-2.5 py-0.5 font-mono text-[10px] text-sky-300">
+              {room.name || 'voice-agent-room'}
+            </span>
+          </div>
         </div>
-        <div className="font-mono text-xs text-zinc-400">
-          Agent State:{' '}
-          <span className="font-semibold uppercase text-primary">
-            {agentState}
-          </span>
+
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 font-mono text-[11px] text-zinc-300">
+            <span className="text-zinc-500">State:</span>
+            <span className="font-semibold uppercase text-sky-400">
+              {agentState}
+            </span>
+          </div>
+
+          <button
+            onClick={onDisconnect}
+            className="flex size-7 items-center justify-center rounded-full border border-white/10 bg-white/5 text-zinc-400 transition-all hover:border-white/20 hover:bg-white/10 hover:text-white active:scale-95"
+            title="Close Voice Assistant"
+          >
+            <X className="size-3.5" />
+          </button>
         </div>
       </div>
 
       {/* Visualizer Centerpiece */}
-      <div className="flex flex-1 flex-col items-center justify-center py-4">
-        <VoiceVisualizer state={agentState} barCount={11} />
+      <div className="relative flex flex-1 flex-col items-center justify-between overflow-hidden px-8 py-6">
+        {/* Ambient Glow */}
+        <div className="orb-fire pointer-events-none -right-24 -top-24 size-80 opacity-15" />
 
-        <div className="mt-4 w-full max-w-md px-6 text-center">
-          <div className="text-xs italic text-zinc-400">
+        {/* 1. Visualizer Stage */}
+        <div className="flex shrink-0 flex-col items-center justify-center pt-2">
+          <VoiceVisualizer
+            state={agentState}
+            barCount={15}
+            engineLabel="LiveKit Agent"
+          />
+        </div>
+
+        {/* 2. Message / Status Feed */}
+        <div className="relative z-10 my-auto flex w-full max-w-xl flex-1 items-center justify-center px-4 py-2 text-center">
+          <div className="rounded-2xl border border-white/5 bg-[#0f172a]/70 px-6 py-3.5 font-mono text-xs text-zinc-300 shadow-xl backdrop-blur-xl">
             {agentState === 'speaking'
               ? `${agentName} is responding...`
               : agentState === 'thinking'
-                ? 'Processing speech...'
+                ? 'LiveKit Agent processing...'
                 : 'Speak naturally into your microphone...'}
           </div>
         </div>
+
+        {/* 3. Spacer bottom */}
+        <div className="h-2 shrink-0" />
       </div>
 
       {/* Control Bar */}
@@ -379,8 +424,14 @@ const DirectVoiceSession: React.FC<{
     let currentRate = audioCtxRef.current?.sampleRate || 48000
     try {
       const track = mediaStreamRef.current?.getAudioTracks()?.[0]
-      const settings = track?.getSettings?.() as MediaTrackSettings & { sampleRate?: number }
-      if (settings?.sampleRate && settings.sampleRate >= 8000 && settings.sampleRate <= 48000) {
+      const settings = track?.getSettings?.() as MediaTrackSettings & {
+        sampleRate?: number
+      }
+      if (
+        settings?.sampleRate &&
+        settings.sampleRate >= 8000 &&
+        settings.sampleRate <= 48000
+      ) {
         currentRate = settings.sampleRate
       }
     } catch {}
@@ -392,7 +443,9 @@ const DirectVoiceSession: React.FC<{
     // If total speech <400ms (6400 samples) and triggered by silence, likely false trigger — keep but log
     const totalMs = (downsampled.length / 16000) * 1000
     if (totalMs < 400) {
-      console.debug(`[VAD] Short turn ${totalMs.toFixed(0)}ms — still sending (confident check passed)`)
+      console.debug(
+        `[VAD] Short turn ${totalMs.toFixed(0)}ms — still sending (confident check passed)`
+      )
     }
 
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -487,55 +540,55 @@ const DirectVoiceSession: React.FC<{
             setAgentText((prev) => prev + parsed.text)
             currentAgentTextRef.current += parsed.text
             setStatusMessage(`${agentName} is responding...`)
-            } else if (
-              parsed.type === 'turn_complete' ||
-              parsed.type === 'interrupted'
-            ) {
-              const uText = currentUserTranscriptRef.current
-              const aText = currentAgentTextRef.current
+          } else if (
+            parsed.type === 'turn_complete' ||
+            parsed.type === 'interrupted'
+          ) {
+            const uText = currentUserTranscriptRef.current
+            const aText = currentAgentTextRef.current
 
-              if (uText && aText) {
-                const now = Date.now()
-                setHistory((prev) => [
-                  ...prev,
-                  { role: 'user', text: uText, timestamp: now - 1000 },
-                  { role: 'agent', text: aText, timestamp: now }
-                ])
+            if (uText && aText) {
+              const now = Date.now()
+              setHistory((prev) => [
+                ...prev,
+                { role: 'user', text: uText, timestamp: now - 1000 },
+                { role: 'agent', text: aText, timestamp: now }
+              ])
 
-                setMessages((prev) => [
-                  ...prev,
-                  {
-                    role: 'user',
-                    content: uText,
-                    created_at: now - 1000
-                  },
-                  {
-                    role: 'agent',
-                    content: aText,
-                    created_at: now
-                  }
-                ])
-              }
-
-              lastTurnCompleteRef.current = true
-              const completedTurnId = turnIdRef.current
-              // Wait for jitter buffer to drain: poll until empty, but ignore if new turn started
-              const checkDone = () => {
-                if (!isMounted) return
-                // If a new turn started, abort this check (new audio will manage state)
-                if (turnIdRef.current !== completedTurnId) return
-                if (activeSourcesRef.current.length === 0) {
-                  setVoiceState('listening')
-                  setStatusMessage('Listening for your voice...')
-                  isAgentSpeakingRef.current = false
-                  lastTurnCompleteRef.current = false
-                  isFirstChunkRef.current = true
-                } else {
-                  setTimeout(checkDone, 80)
+              setMessages((prev) => [
+                ...prev,
+                {
+                  role: 'user',
+                  content: uText,
+                  created_at: now - 1000
+                },
+                {
+                  role: 'agent',
+                  content: aText,
+                  created_at: now
                 }
+              ])
+            }
+
+            lastTurnCompleteRef.current = true
+            const completedTurnId = turnIdRef.current
+            // Wait for jitter buffer to drain: poll until empty, but ignore if new turn started
+            const checkDone = () => {
+              if (!isMounted) return
+              // If a new turn started, abort this check (new audio will manage state)
+              if (turnIdRef.current !== completedTurnId) return
+              if (activeSourcesRef.current.length === 0) {
+                setVoiceState('listening')
+                setStatusMessage('Listening for your voice...')
+                isAgentSpeakingRef.current = false
+                lastTurnCompleteRef.current = false
+                isFirstChunkRef.current = true
+              } else {
+                setTimeout(checkDone, 80)
               }
-              // Brave 120ms buffer: wait a bit longer than before to let jitter drain
-              setTimeout(checkDone, 180)
+            }
+            // Brave 120ms buffer: wait a bit longer than before to let jitter drain
+            setTimeout(checkDone, 180)
           } else if (parsed.type === 'no_speech') {
             setVoiceState('listening')
             setStatusMessage('Listening for your voice...')
@@ -596,7 +649,10 @@ const DirectVoiceSession: React.FC<{
       // 1. Maintain ~180ms circular pre-roll buffer — dynamic size based on actual chunk duration (Brave 2.66ms @128 vs 42ms @2048)
       const ctxRate = audioCtxRef.current?.sampleRate || 48000
       const chunkMs = (inputData.length / ctxRate) * 1000
-      const maxPreRoll = Math.max(4, Math.ceil(PRE_ROLL_MS / Math.max(1, chunkMs)))
+      const maxPreRoll = Math.max(
+        4,
+        Math.ceil(PRE_ROLL_MS / Math.max(1, chunkMs))
+      )
       preRollBufferRef.current.push(chunkCopy)
       if (preRollBufferRef.current.length > maxPreRoll) {
         preRollBufferRef.current.shift()
@@ -630,7 +686,10 @@ const DirectVoiceSession: React.FC<{
           consecutiveVoiceFramesRef.current += 1
           consecutiveSilenceFramesRef.current = 0
           // Debounced barge-in: require confident voice (350ms continuous + cooldown) to cancel TTS (Never interrupt)
-          const neededFrames = Math.max(3, Math.ceil(CONFIDENT_VOICE_MS / Math.max(1, chunkMs)))
+          const neededFrames = Math.max(
+            3,
+            Math.ceil(CONFIDENT_VOICE_MS / Math.max(1, chunkMs))
+          )
           if (
             isAgentSpeakingRef.current &&
             consecutiveVoiceFramesRef.current >= neededFrames &&
@@ -642,7 +701,10 @@ const DirectVoiceSession: React.FC<{
 
           if (!isRecordingAudioRef.current) {
             // Require confident start: at least 80ms of voice before opening turn (avoid breath pop)
-            if (consecutiveVoiceFramesRef.current >= Math.ceil(80 / Math.max(1, chunkMs))) {
+            if (
+              consecutiveVoiceFramesRef.current >=
+              Math.ceil(80 / Math.max(1, chunkMs))
+            ) {
               isSpeakingRef.current = true
               startAudioRecording()
             } else {
@@ -670,7 +732,10 @@ const DirectVoiceSession: React.FC<{
           }
         } else {
           // Not recording, decay voice frames
-          consecutiveVoiceFramesRef.current = Math.max(0, consecutiveVoiceFramesRef.current - 1)
+          consecutiveVoiceFramesRef.current = Math.max(
+            0,
+            consecutiveVoiceFramesRef.current - 1
+          )
         }
       } else if (isRecordingAudioRef.current) {
         sampleBufferRef.current.push(chunkCopy)
@@ -866,7 +931,7 @@ const DirectVoiceSession: React.FC<{
     const startTime = Math.max(currentTime + 0.02, nextStartTimeRef.current)
     try {
       source.start(startTime)
-    } catch (e) {
+    } catch {
       // Fallback: try immediate
       try {
         source.start()
@@ -966,52 +1031,77 @@ const DirectVoiceSession: React.FC<{
   return (
     <div
       onClick={unlockAudio}
-      className="flex h-[540px] w-full flex-col justify-between"
+      className="flex h-[680px] max-h-[88vh] w-full flex-col justify-between bg-[#0a0f1e]"
     >
       {/* Top Status Header */}
-      <div className="flex items-center justify-between border-b border-white/5 bg-[#0a0f1e]/80 px-6 py-3.5 backdrop-blur-xl">
-        <div className="flex items-center gap-2">
-          <span className="flex size-2.5 animate-pulse rounded-full bg-[#f48c06] shadow-[0_0_8px_#f48c06]" />
-          <span className="font-mono text-xs text-zinc-300">
-            Deepgram Voice Bridge
+      <div className="flex items-center justify-between border-b border-white/10 bg-[#0a0f1e]/95 px-7 py-4 backdrop-blur-2xl">
+        <div className="flex items-center gap-3">
+          <span className="relative flex size-2.5">
+            <span className="size-full animate-ping rounded-full bg-[#f48c06] opacity-75" />
+            <span className="absolute inset-0 size-2.5 rounded-full bg-[#f48c06] shadow-[0_0_8px_#f48c06]" />
           </span>
+          <div className="flex items-center gap-2">
+            <Zap className="size-4 text-[#f48c06]" />
+            <span className="font-mono text-xs font-medium text-zinc-200">
+              Deepgram Voice Bridge
+            </span>
+            <span className="rounded-full border border-[#f48c06]/20 bg-[#f48c06]/10 px-2.5 py-0.5 font-mono text-[10px] text-[#faa307]">
+              Nova-3 STT • Flux TTS
+            </span>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
+
+        <div className="flex items-center gap-2.5">
           <button
             onClick={() => setShowHistory(!showHistory)}
-            className={`flex items-center gap-1 rounded-full border px-3 py-1 font-mono text-[11px] transition-all ${
+            className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 font-mono text-[11px] transition-all ${
               showHistory
                 ? 'border-[#e85d04]/50 bg-[#e85d04]/20 text-[#f48c06]'
                 : 'border-white/10 bg-white/5 text-zinc-400 hover:border-white/20 hover:text-zinc-200'
             }`}
-            title="View full conversation transcript"
+            title="Toggle full conversation transcript"
           >
-            <MessageSquare className="size-3" />
+            <MessageSquare className="size-3.5" />
             <span>Transcript ({(history.length / 2) | 0})</span>
           </button>
+
           <button
             onClick={() => setIsPushToTalk(!isPushToTalk)}
-            className={`rounded-full border px-3 py-1 font-mono text-[11px] transition-all ${
+            className={`rounded-full border px-3 py-1.5 font-mono text-[11px] transition-all ${
               isPushToTalk
                 ? 'border-amber-500/40 bg-amber-500/20 text-amber-300'
                 : 'border-white/10 bg-white/5 text-zinc-400 hover:border-white/20 hover:text-zinc-200'
             }`}
+            title={
+              isPushToTalk
+                ? 'Switch to Hands-free VAD'
+                : 'Switch to Push-To-Talk'
+            }
           >
             {isPushToTalk ? 'Push-To-Talk' : 'Fast VAD'}
           </button>
-          <div className="font-mono text-xs text-zinc-400">
-            State:{' '}
+
+          <div className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 font-mono text-[11px] text-zinc-300">
+            <span className="text-zinc-500">State:</span>
             <span className="font-semibold uppercase text-[#f48c06]">
               {voiceState}
             </span>
           </div>
+
+          <button
+            onClick={onDisconnect}
+            className="flex size-7 items-center justify-center rounded-full border border-white/10 bg-white/5 text-zinc-400 transition-all hover:border-white/20 hover:bg-white/10 hover:text-white active:scale-95"
+            title="Close Voice Assistant"
+          >
+            <X className="size-3.5" />
+          </button>
         </div>
       </div>
 
       {showHistory ? (
         /* Full Transcript View */
-        <div className="flex flex-1 flex-col overflow-hidden bg-[#0a0f1e]/90 p-6">
-          <div className="mb-3 flex items-center justify-between">
+        <div className="flex flex-1 flex-col overflow-hidden bg-[#0a0f1e]/90 p-7">
+          <div className="mb-4 flex items-center justify-between">
             <h4 className="font-mono text-xs uppercase tracking-wider text-zinc-400">
               Saved Conversation Turns ({(history.length / 2) | 0})
             </h4>
@@ -1019,19 +1109,19 @@ const DirectVoiceSession: React.FC<{
               variant="outline"
               size="sm"
               onClick={copyTranscriptText}
-              className="h-7 gap-1.5 rounded-lg border-white/10 bg-white/5 px-2.5 text-xs text-zinc-300 transition-all hover:border-[#e85d04]/40 hover:bg-[#e85d04]/20 hover:text-white"
+              className="h-8 gap-1.5 rounded-xl border-white/10 bg-white/5 px-3 text-xs text-zinc-300 transition-all hover:border-[#e85d04]/40 hover:bg-[#e85d04]/20 hover:text-white"
             >
               {copied ? (
-                <Check className="size-3 text-[#22c55e]" />
+                <Check className="size-3.5 text-[#22c55e]" />
               ) : (
-                <Copy className="size-3" />
+                <Copy className="size-3.5" />
               )}
               {copied ? 'Copied' : 'Copy All'}
             </Button>
           </div>
-          <div className="flex-1 space-y-3 overflow-y-auto rounded-2xl border border-white/5 bg-[#0f172a]/60 p-4 pr-2">
+          <div className="flex-1 space-y-3.5 overflow-y-auto rounded-2xl border border-white/5 bg-[#0f172a]/60 p-5 pr-3">
             {history.length === 0 ? (
-              <div className="py-12 text-center font-mono text-xs italic text-zinc-500">
+              <div className="py-16 text-center font-mono text-xs italic text-zinc-500">
                 No spoken turns yet. Speak or type to start recording the
                 conversation.
               </div>
@@ -1039,16 +1129,16 @@ const DirectVoiceSession: React.FC<{
               history.map((turn, i) => (
                 <div
                   key={i}
-                  className={`rounded-xl p-3 text-xs ${
+                  className={`rounded-2xl p-3.5 text-xs ${
                     turn.role === 'user'
-                      ? 'ml-6 border border-white/10 bg-white/5'
-                      : 'mr-6 border border-[#e85d04]/30 bg-[#e85d04]/10'
+                      ? 'ml-8 border border-sky-500/20 bg-sky-950/20 text-zinc-200'
+                      : 'mr-8 border border-[#e85d04]/30 bg-[#e85d04]/10 text-zinc-100'
                   }`}
                 >
-                  <div className="mb-1 font-mono text-[10px] uppercase text-zinc-400">
+                  <div className="mb-1.5 font-mono text-[10px] uppercase text-zinc-400">
                     {turn.role === 'user' ? 'You' : agentName}
                   </div>
-                  <div className="font-main leading-relaxed text-zinc-200">
+                  <div className="font-main text-sm leading-relaxed">
                     {turn.text}
                   </div>
                 </div>
@@ -1058,49 +1148,69 @@ const DirectVoiceSession: React.FC<{
         </div>
       ) : (
         /* Visualizer Centerpiece */
-        <div className="relative flex flex-1 flex-col items-center justify-center overflow-hidden bg-[#0a0f1e]/90 py-4">
+        <div className="relative flex flex-1 flex-col items-center justify-between overflow-hidden bg-[#0a0f1e]/90 px-8 py-6">
           {/* Subtle background glow */}
-          <div className="orb-orange pointer-events-none -right-20 -top-20 size-64 opacity-20" />
+          <div className="orb-orange pointer-events-none -right-24 -top-24 size-80 opacity-20" />
 
-          <VoiceVisualizer
-            state={voiceState}
-            volume={voiceState === 'speaking' ? 0.6 : micVolume}
-            barCount={11}
-          />
+          {/* 1. Visualizer Stage */}
+          <div className="flex shrink-0 flex-col items-center justify-center pt-1">
+            <VoiceVisualizer
+              state={voiceState}
+              volume={voiceState === 'speaking' ? 0.65 : micVolume}
+              barCount={15}
+              engineLabel="Deepgram Flux"
+            />
+          </div>
 
-          {/* Live Conversation Transcript Feed */}
-          <div className="relative z-10 mt-2 flex min-h-[72px] w-full max-w-md items-center justify-center px-6 text-center">
+          {/* 2. Live Conversation Transcript Feed */}
+          <div className="relative z-10 my-auto flex w-full max-w-xl flex-1 items-center justify-center py-2">
             <AnimatePresence mode="wait">
               {agentText ? (
                 <motion.div
                   key="agent-text"
-                  initial={{ opacity: 0, y: 8 }}
+                  initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="max-h-24 w-full overflow-y-auto rounded-2xl border border-[#e85d04]/30 bg-[#0f172a]/90 p-3 text-sm text-zinc-100 shadow-lg"
+                  className="max-h-36 w-full overflow-y-auto rounded-2xl border border-[#e85d04]/30 bg-[#0f172a]/95 p-4 text-xs text-zinc-100 shadow-2xl shadow-orange-950/30 backdrop-blur-xl"
                 >
-                  <div className="mb-1 font-mono text-[10px] uppercase text-[#f48c06]">
-                    {agentName}
+                  <div className="mb-2 flex items-center justify-between font-mono text-[10px] uppercase text-[#f48c06]">
+                    <span className="flex items-center gap-1.5">
+                      <Sparkles className="size-3" />
+                      {agentName}
+                    </span>
+                    <span className="rounded-full bg-[#e85d04]/10 px-2 py-0.5 text-[9px] font-semibold text-[#faa307]">
+                      Speaking
+                    </span>
                   </div>
-                  {agentText}
+                  <div className="font-main text-sm leading-relaxed text-zinc-100">
+                    {agentText}
+                  </div>
                 </motion.div>
               ) : userTranscript ? (
                 <motion.div
                   key="user-text"
-                  initial={{ opacity: 0, y: 8 }}
+                  initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="w-full rounded-2xl border border-white/10 bg-[#0f172a]/90 p-3 text-sm text-zinc-200 shadow-lg"
+                  className="max-h-36 w-full overflow-y-auto rounded-2xl border border-sky-500/30 bg-[#0f172a]/95 p-4 text-xs text-zinc-100 shadow-2xl shadow-sky-950/30 backdrop-blur-xl"
                 >
-                  <div className="mb-1 font-mono text-[10px] uppercase text-zinc-400">
-                    You
+                  <div className="mb-2 flex items-center justify-between font-mono text-[10px] uppercase text-sky-400">
+                    <span className="flex items-center gap-1.5">
+                      <Mic className="size-3" />
+                      You
+                    </span>
+                    <span className="rounded-full bg-sky-500/10 px-2 py-0.5 text-[9px] font-semibold text-sky-300">
+                      Spoken
+                    </span>
                   </div>
-                  {userTranscript}
+                  <div className="font-main text-sm leading-relaxed text-zinc-100">
+                    {userTranscript}
+                  </div>
                 </motion.div>
               ) : (
                 <motion.div
                   key="status-msg"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  className="font-mono text-xs italic text-zinc-400"
+                  className="rounded-2xl border border-white/5 bg-[#0f172a]/60 px-6 py-3 font-mono text-xs text-zinc-400 backdrop-blur-xl"
                 >
                   {statusMessage}
                 </motion.div>
@@ -1108,65 +1218,78 @@ const DirectVoiceSession: React.FC<{
             </AnimatePresence>
           </div>
 
-          {/* Live Mic Level Feedback Indicator */}
-          <div className="relative z-10 mt-1 flex items-center gap-2 rounded-full border border-white/5 bg-[#0f172a]/60 px-3 py-1 font-mono text-[11px] text-zinc-400 shadow-sm">
-            <Mic
-              className={`size-3 ${micVolume > 0.02 ? 'animate-pulse text-[#22c55e]' : 'text-zinc-500'}`}
-            />
-            <span className="text-[10px] text-zinc-400">Input:</span>
-            <div className="h-1.5 w-20 overflow-hidden rounded-full bg-white/10">
-              <div
-                className="h-full bg-gradient-to-r from-[#22c55e] via-[#f48c06] to-[#dc2f02] transition-all duration-75"
-                style={{
-                  width: `${Math.min(100, Math.max(4, micVolume * 100))}%`
-                }}
+          {/* 3. Bottom Controls & Mic Feedback */}
+          <div className="relative z-10 flex w-full max-w-xl shrink-0 flex-col items-center gap-3">
+            {/* Live Mic Level Feedback Indicator */}
+            <div className="flex items-center gap-3 rounded-full border border-white/10 bg-[#0f172a]/80 px-4 py-1.5 font-mono text-[11px] text-zinc-400 shadow-md backdrop-blur-xl">
+              <Mic
+                className={`size-3.5 transition-colors ${
+                  micVolume > 0.018
+                    ? 'animate-pulse text-emerald-400'
+                    : 'text-zinc-500'
+                }`}
               />
-            </div>
-            <span className="text-[10px] text-zinc-500">
-              {micVolume > 0.018 ? 'Voice Active' : 'Ready'}
-            </span>
-          </div>
-
-          {/* Push to talk hold button or text input */}
-          {isPushToTalk ? (
-            <div className="relative z-10 mt-4 flex w-full max-w-xs justify-center">
-              <button
-                onMouseDown={handleManualPushToTalkStart}
-                onMouseUp={handleManualPushToTalkEnd}
-                onTouchStart={handleManualPushToTalkStart}
-                onTouchEnd={handleManualPushToTalkEnd}
-                className={`flex select-none items-center gap-2 rounded-full px-6 py-2.5 text-xs font-medium shadow-lg transition-all ${
-                  isManualRecording
-                    ? 'scale-95 bg-rose-600 text-white ring-4 ring-rose-500/30'
-                    : 'bg-gradient-to-tr from-[#e85d04] to-[#f48c06] text-white hover:brightness-110 active:scale-95'
+              <span className="text-[10px] text-zinc-400">Mic Level</span>
+              <div className="h-1.5 w-32 overflow-hidden rounded-full bg-white/10">
+                <div
+                  className="h-full bg-gradient-to-r from-emerald-400 via-amber-400 to-[#e85d04] transition-all duration-75"
+                  style={{
+                    width: `${Math.min(100, Math.max(4, micVolume * 100))}%`
+                  }}
+                />
+              </div>
+              <span
+                className={`text-[10px] font-medium transition-colors ${
+                  micVolume > 0.018 ? 'text-emerald-400' : 'text-zinc-500'
                 }`}
               >
-                <Mic className="size-4" />
-                {isManualRecording ? 'Release to Send' : 'Hold to Speak'}
-              </button>
+                {micVolume > 0.018 ? 'Voice Active' : 'Ready'}
+              </span>
             </div>
-          ) : (
-            <div className="relative z-10 mt-4 flex w-full max-w-sm items-center gap-1.5 px-4">
-              <input
-                type="text"
-                placeholder="Ask with voice or type message..."
-                value={quickInput}
-                onChange={(e) => setQuickInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleSendPrompt(quickInput)
-                }}
-                className="h-9 w-full rounded-xl border border-white/10 bg-[#0f172a]/90 px-3 text-xs text-white placeholder:text-zinc-500 focus:border-[#e85d04]/60 focus:outline-none"
-              />
-              <Button
-                size="icon"
-                onClick={() => handleSendPrompt(quickInput)}
-                disabled={!quickInput.trim()}
-                className="size-9 shrink-0 rounded-xl bg-gradient-to-tr from-[#e85d04] to-[#f48c06] text-white hover:brightness-110"
-              >
-                <Send className="size-3.5" />
-              </Button>
-            </div>
-          )}
+
+            {/* Push to talk hold button or text input */}
+            {isPushToTalk ? (
+              <div className="flex w-full max-w-sm justify-center">
+                <button
+                  onMouseDown={handleManualPushToTalkStart}
+                  onMouseUp={handleManualPushToTalkEnd}
+                  onTouchStart={handleManualPushToTalkStart}
+                  onTouchEnd={handleManualPushToTalkEnd}
+                  className={`relative flex select-none items-center gap-2 rounded-full px-9 py-3 font-mono text-xs font-semibold text-white shadow-xl transition-all ${
+                    isManualRecording
+                      ? 'scale-95 bg-rose-600 shadow-rose-950/60 ring-4 ring-rose-500/40'
+                      : 'bg-gradient-to-tr from-[#e85d04] to-[#f48c06] shadow-orange-950/50 hover:brightness-110 active:scale-95'
+                  }`}
+                >
+                  <Mic className="size-4" />
+                  <span>
+                    {isManualRecording ? 'Release to Send' : 'Hold to Speak'}
+                  </span>
+                </button>
+              </div>
+            ) : (
+              <div className="flex w-full items-center gap-2 px-2">
+                <input
+                  type="text"
+                  placeholder="Ask with voice or type message..."
+                  value={quickInput}
+                  onChange={(e) => setQuickInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleSendPrompt(quickInput)
+                  }}
+                  className="h-11 w-full rounded-2xl border border-white/10 bg-[#0f172a]/90 px-4 text-xs text-white backdrop-blur-xl placeholder:text-zinc-500 focus:border-[#e85d04]/60 focus:outline-none"
+                />
+                <Button
+                  size="icon"
+                  onClick={() => handleSendPrompt(quickInput)}
+                  disabled={!quickInput.trim()}
+                  className="size-11 shrink-0 rounded-2xl bg-gradient-to-tr from-[#e85d04] to-[#f48c06] text-white shadow-md shadow-orange-950/50 hover:brightness-110 disabled:opacity-40"
+                >
+                  <Send className="size-4" />
+                </Button>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -1242,7 +1365,10 @@ export const LiveKitVoiceModal: React.FC<LiveKitVoiceModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-xl overflow-hidden rounded-3xl border border-white/10 bg-[#0a0f1e] p-0 text-white shadow-2xl ring-1 ring-white/5 backdrop-blur-2xl">
+      <DialogContent
+        hideCloseButton={true}
+        className="max-h-[92vh] max-w-3xl overflow-hidden rounded-3xl border border-white/10 bg-[#0a0f1e] p-0 text-white shadow-2xl ring-1 ring-white/10 backdrop-blur-2xl sm:max-w-[780px] lg:max-w-[820px]"
+      >
         <DialogHeader className="sr-only">
           <DialogTitle>Realtime Voice Assistant</DialogTitle>
           <DialogDescription>
@@ -1251,7 +1377,7 @@ export const LiveKitVoiceModal: React.FC<LiveKitVoiceModalProps> = ({
         </DialogHeader>
 
         {isLoading ? (
-          <div className="flex h-[480px] flex-col items-center justify-center gap-4 bg-[#0a0f1e]">
+          <div className="flex h-[520px] flex-col items-center justify-center gap-4 bg-[#0a0f1e]">
             <RefreshCw className="size-8 animate-spin text-[#f48c06]" />
             <div className="font-mono text-sm font-medium text-zinc-300">
               Initializing Voice Session...

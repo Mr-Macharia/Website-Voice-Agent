@@ -31,8 +31,12 @@ interface ReferenceItemProps {
 
 const ReferenceItem: FC<ReferenceItemProps> = ({ reference }) => (
   <div className="relative flex h-[64px] w-[200px] cursor-default flex-col justify-between overflow-hidden rounded-xl border border-white/10 bg-[#0f172a]/70 p-3 transition-colors hover:border-[#e85d04]/40 hover:bg-[#0f172a]">
-    <p className="text-xs font-semibold text-white truncate font-main">{reference.name}</p>
-    <p className="truncate text-[11px] font-mono text-zinc-400">{reference.content}</p>
+    <p className="truncate font-main text-xs font-semibold text-white">
+      {reference.name}
+    </p>
+    <p className="truncate font-mono text-[11px] text-zinc-400">
+      {reference.content}
+    </p>
   </div>
 )
 
@@ -58,16 +62,18 @@ const References: FC<ReferenceProps> = ({ references }) => (
 
 const AgentMessageWrapper = ({ message }: MessageWrapperProps) => {
   return (
-    <div className="flex flex-col gap-y-3 w-full">
+    <div className="flex w-full flex-col gap-y-3">
       {message.extra_data?.reasoning_steps &&
         message.extra_data.reasoning_steps.length > 0 && (
           <div className="flex w-full justify-start">
             <div className="flex max-w-[88%] items-start gap-3 rounded-2xl border border-purple-500/20 bg-purple-950/20 p-3.5 backdrop-blur-md">
-              <div className="size-6 rounded-lg bg-purple-500/20 text-purple-400 flex items-center justify-center shrink-0 mt-0.5">
+              <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-lg bg-purple-500/20 text-purple-400">
                 <BrainCircuit className="size-3.5" />
               </div>
               <div className="flex flex-col gap-2">
-                <p className="text-[11px] font-mono uppercase tracking-wider text-purple-300 font-semibold">Reasoning Steps</p>
+                <p className="font-mono text-[11px] font-semibold uppercase tracking-wider text-purple-300">
+                  Reasoning Steps
+                </p>
                 <Reasonings reasoning={message.extra_data.reasoning_steps} />
               </div>
             </div>
@@ -78,11 +84,13 @@ const AgentMessageWrapper = ({ message }: MessageWrapperProps) => {
         message.extra_data.references.length > 0 && (
           <div className="flex w-full justify-start">
             <div className="flex max-w-[88%] items-start gap-3 rounded-2xl border border-white/10 bg-white/5 p-3.5 backdrop-blur-md">
-              <div className="size-6 rounded-lg bg-white/10 text-zinc-300 flex items-center justify-center shrink-0 mt-0.5">
+              <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-lg bg-white/10 text-zinc-300">
                 <BookOpen className="size-3.5" />
               </div>
               <div className="flex flex-col gap-2">
-                <p className="text-[11px] font-mono uppercase tracking-wider text-zinc-400 font-semibold">References</p>
+                <p className="font-mono text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+                  References
+                </p>
                 <References references={message.extra_data.references} />
               </div>
             </div>
@@ -92,11 +100,13 @@ const AgentMessageWrapper = ({ message }: MessageWrapperProps) => {
       {message.tool_calls && message.tool_calls.length > 0 && (
         <div className="flex w-full justify-start">
           <div className="flex max-w-[88%] items-start gap-3 rounded-2xl border border-[#e85d04]/20 bg-[#e85d04]/10 p-3.5 backdrop-blur-md">
-            <div className="size-6 rounded-lg bg-[#e85d04]/20 text-[#f48c06] flex items-center justify-center shrink-0 mt-0.5">
+            <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-lg bg-[#e85d04]/20 text-[#f48c06]">
               <Wrench className="size-3.5" />
             </div>
             <div className="flex flex-col gap-2">
-              <p className="text-[11px] font-mono uppercase tracking-wider text-orange-300 font-semibold">Tool Execution</p>
+              <p className="font-mono text-[11px] font-semibold uppercase tracking-wider text-orange-300">
+                Tool Execution
+              </p>
               <div className="flex flex-wrap gap-2">
                 {message.tool_calls.map((toolCall, index) => (
                   <ToolComponent
@@ -119,7 +129,7 @@ const AgentMessageWrapper = ({ message }: MessageWrapperProps) => {
 }
 
 const Reasoning: FC<ReasoningStepProps> = ({ index, stepTitle }) => (
-  <div className="flex items-center gap-2 text-zinc-300 text-xs">
+  <div className="flex items-center gap-2 text-xs text-zinc-300">
     <span className="flex h-5 items-center rounded-md bg-purple-500/20 px-2 font-mono text-[10px] text-purple-300">
       STEP {index + 1}
     </span>
@@ -140,8 +150,8 @@ const Reasonings: FC<ReasoningProps> = ({ reasoning }) => (
 )
 
 const ToolComponent = memo(({ tools }: ToolCallProps) => (
-  <div className="inline-flex items-center gap-1.5 rounded-xl border border-[#e85d04]/30 bg-[#0f172a]/90 px-3 py-1 text-xs font-mono text-orange-200 shadow-sm">
-    <span className="size-1.5 rounded-full bg-[#f48c06] animate-pulse" />
+  <div className="inline-flex items-center gap-1.5 rounded-xl border border-[#e85d04]/30 bg-[#0f172a]/90 px-3 py-1 font-mono text-xs text-orange-200 shadow-sm">
+    <span className="size-1.5 animate-pulse rounded-full bg-[#f48c06]" />
     <span className="uppercase">{tools.tool_name}</span>
   </div>
 ))
@@ -153,7 +163,7 @@ const Messages = ({ messages }: MessageListProps) => {
   }
 
   return (
-    <div className="flex flex-col gap-y-6 w-full">
+    <div className="flex w-full flex-col gap-y-6">
       {messages.map((message, index) => {
         const key = `${message.role}-${message.created_at}-${index}`
         const isLastMessage = index === messages.length - 1

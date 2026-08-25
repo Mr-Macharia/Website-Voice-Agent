@@ -22,15 +22,17 @@ const ENDPOINT_PLACEHOLDER = 'NO ENDPOINT ADDED'
 
 const SidebarHeader = () => (
   <div className="flex items-center gap-2.5 px-1 py-1">
-    <div className="size-8 rounded-xl bg-gradient-to-tr from-[#e85d04] via-[#f48c06] to-[#dc2f02] flex items-center justify-center shadow-lg shadow-orange-950/50 ring-1 ring-white/20">
-      <span className="font-mono text-xs font-black text-white tracking-tighter">GM</span>
+    <div className="flex size-8 items-center justify-center rounded-xl bg-gradient-to-tr from-[#e85d04] via-[#f48c06] to-[#dc2f02] shadow-lg shadow-orange-950/50 ring-1 ring-white/20">
+      <span className="font-mono text-xs font-black tracking-tighter text-white">
+        GM
+      </span>
     </div>
-    <div className="flex flex-col min-w-0">
-      <span className="text-xs font-bold tracking-tight text-white font-large truncate">
+    <div className="flex min-w-0 flex-col">
+      <span className="truncate font-large text-xs font-bold tracking-tight text-white">
         Gichogu Macharia
       </span>
-      <span className="text-[10px] font-mono text-[#f48c06] tracking-wider uppercase flex items-center gap-1">
-        <Sparkles className="size-2.5 inline" /> AI Agent OS
+      <span className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-[#f48c06]">
+        <Sparkles className="inline size-2.5" /> AI Agent OS
       </span>
     </div>
   </div>
@@ -47,10 +49,12 @@ const NewChatButton = ({
     onClick={onClick}
     disabled={disabled}
     size="lg"
-    className="h-9 w-full rounded-xl bg-white/10 border border-white/10 text-xs font-medium text-white hover:bg-white/15 hover:border-white/20 transition-all shadow-sm"
+    className="h-9 w-full rounded-xl border border-white/10 bg-white/10 text-xs font-medium text-white shadow-sm transition-all hover:border-white/20 hover:bg-white/15"
   >
     <Icon type="plus-icon" size="xs" className="text-white" />
-    <span className="uppercase font-mono text-[11px] tracking-wider">New Chat</span>
+    <span className="font-mono text-[11px] uppercase tracking-wider">
+      New Chat
+    </span>
   </Button>
 )
 
@@ -58,16 +62,18 @@ const LiveVoiceButton = ({ onClick }: { onClick: () => void }) => (
   <Button
     onClick={onClick}
     size="lg"
-    className="h-10 w-full rounded-xl border border-[#e85d04]/40 bg-gradient-to-r from-[#e85d04]/20 via-[#f48c06]/15 to-[#dc2f02]/20 text-xs font-semibold text-orange-200 hover:border-[#e85d04] hover:bg-[#e85d04]/30 shadow-lg shadow-orange-950/40 transition-all group relative overflow-hidden"
+    className="group relative h-10 w-full overflow-hidden rounded-xl border border-[#e85d04]/40 bg-gradient-to-r from-[#e85d04]/20 via-[#f48c06]/15 to-[#dc2f02]/20 text-xs font-semibold text-orange-200 shadow-lg shadow-orange-950/40 transition-all hover:border-[#e85d04] hover:bg-[#e85d04]/30"
   >
-    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-    <Mic className="size-4 text-[#f48c06] group-hover:scale-110 transition-transform animate-pulse" />
-    <span className="uppercase font-mono text-[11px] tracking-wider text-white">Live Voice Agent</span>
+    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+    <Mic className="size-4 animate-pulse text-[#f48c06] transition-transform group-hover:scale-110" />
+    <span className="font-mono text-[11px] uppercase tracking-wider text-white">
+      Live Voice Agent
+    </span>
   </Button>
 )
 
 const ModelDisplay = ({ model }: { model: string }) => (
-  <div className="flex h-9 w-full items-center gap-3 rounded-xl border border-white/10 bg-[#0f172a]/70 p-3 text-xs font-mono uppercase text-zinc-300">
+  <div className="flex h-9 w-full items-center gap-3 rounded-xl border border-white/10 bg-[#0f172a]/70 p-3 font-mono text-xs uppercase text-zinc-300">
     {(() => {
       const icon = getProviderIcon(model)
       return icon ? <Icon type={icon} className="shrink-0" size="xs" /> : null
@@ -100,7 +106,9 @@ const Endpoint = () => {
   }, [selectedEndpoint])
 
   const getStatusColor = (isActive: boolean) =>
-    isActive ? 'bg-[#22c55e] shadow-[0_0_8px_#22c55e]' : 'bg-[#dc2f02] shadow-[0_0_8px_#dc2f02]'
+    isActive
+      ? 'bg-[#22c55e] shadow-[0_0_8px_#22c55e]'
+      : 'bg-[#dc2f02] shadow-[0_0_8px_#dc2f02]'
 
   const handleSave = async () => {
     if (!isValidUrl(endpointValue)) {
@@ -140,7 +148,9 @@ const Endpoint = () => {
 
   return (
     <div className="flex flex-col items-start gap-2">
-      <div className="text-[11px] font-mono uppercase tracking-wider text-zinc-400">AgentOS</div>
+      <div className="font-mono text-[11px] uppercase tracking-wider text-zinc-400">
+        AgentOS
+      </div>
       {isEditing ? (
         <div className="flex w-full items-center gap-1">
           <input
@@ -148,14 +158,14 @@ const Endpoint = () => {
             value={endpointValue}
             onChange={(e) => setEndpointValue(e.target.value)}
             onKeyDown={handleKeyDown}
-            className="flex h-9 w-full items-center text-ellipsis rounded-xl border border-[#e85d04]/50 bg-[#0f172a] p-3 text-xs font-mono text-zinc-200 focus:outline-none"
+            className="flex h-9 w-full items-center text-ellipsis rounded-xl border border-[#e85d04]/50 bg-[#0f172a] p-3 font-mono text-xs text-zinc-200 focus:outline-none"
             autoFocus
           />
           <Button
             variant="ghost"
             size="icon"
             onClick={handleSave}
-            className="hover:cursor-pointer hover:bg-white/5 text-zinc-300"
+            className="text-zinc-300 hover:cursor-pointer hover:bg-white/5"
           >
             <Icon type="save" size="xs" />
           </Button>
@@ -163,7 +173,7 @@ const Endpoint = () => {
       ) : (
         <div className="flex w-full items-center gap-1">
           <motion.div
-            className="relative flex h-9 w-full cursor-pointer items-center justify-between rounded-xl border border-white/10 bg-[#0f172a]/60 p-3 uppercase hover:border-[#e85d04]/40 transition-colors"
+            className="relative flex h-9 w-full cursor-pointer items-center justify-between rounded-xl border border-white/10 bg-[#0f172a]/60 p-3 uppercase transition-colors hover:border-[#e85d04]/40"
             onMouseEnter={() => setIsHovering(true)}
             onMouseLeave={() => setIsHovering(false)}
             onClick={() => setIsEditing(true)}
@@ -179,7 +189,7 @@ const Endpoint = () => {
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.2 }}
                 >
-                  <p className="flex items-center gap-2 whitespace-nowrap text-xs font-mono text-zinc-200">
+                  <p className="flex items-center gap-2 whitespace-nowrap font-mono text-xs text-zinc-200">
                     <Icon type="edit" size="xxs" /> EDIT AGENTOS
                   </p>
                 </motion.div>
@@ -192,7 +202,7 @@ const Endpoint = () => {
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.2 }}
                 >
-                  <p className="text-xs font-mono text-zinc-400">
+                  <p className="font-mono text-xs text-zinc-400">
                     {isMounted
                       ? truncateText(selectedEndpoint, 21) ||
                         ENDPOINT_PLACEHOLDER
@@ -209,7 +219,7 @@ const Endpoint = () => {
             variant="ghost"
             size="icon"
             onClick={handleRefresh}
-            className="hover:cursor-pointer hover:bg-white/5 text-zinc-400 hover:text-zinc-200"
+            className="text-zinc-400 hover:cursor-pointer hover:bg-white/5 hover:text-zinc-200"
           >
             <motion.div
               key={isRotating ? 'rotating' : 'idle'}
@@ -266,14 +276,14 @@ const Sidebar = ({
   return (
     <>
       <motion.aside
-        className="relative flex h-screen shrink-0 grow-0 flex-col overflow-hidden border-r border-white/5 bg-[#0f172a]/60 backdrop-blur-2xl px-4 py-3.5 font-main z-20"
+        className="relative z-20 flex h-screen shrink-0 grow-0 flex-col overflow-hidden border-r border-white/5 bg-[#0f172a]/60 px-4 py-3.5 font-main backdrop-blur-2xl"
         initial={{ width: '27.5rem' }}
         animate={{ width: isCollapsed ? '3.5rem' : '27.5rem' }}
         transition={{ type: 'spring', stiffness: 300, damping: 30 }}
       >
         <motion.button
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="absolute right-3 top-3.5 z-10 p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/5 transition-colors"
+          className="absolute right-3 top-3.5 z-10 rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-white/5 hover:text-white"
           aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           type="button"
           whileTap={{ scale: 0.95 }}
@@ -314,7 +324,7 @@ const Sidebar = ({
                     animate={{ opacity: 1 }}
                     transition={{ duration: 0.5, ease: 'easeInOut' }}
                   >
-                    <div className="text-[11px] font-mono uppercase tracking-wider text-zinc-400">
+                    <div className="font-mono text-[11px] uppercase tracking-wider text-zinc-400">
                       Mode
                     </div>
                     {isEndpointLoading ? (

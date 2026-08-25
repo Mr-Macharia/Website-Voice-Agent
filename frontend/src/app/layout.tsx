@@ -18,13 +18,17 @@ export default function RootLayout({
     <html lang="en" className="dark">
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          rel="preconnect"
+          href="https://fonts.gstatic.com"
+          crossOrigin="anonymous"
+        />
         <link
           href="https://fonts.googleapis.com/css2?family=Georama:ital,wght@0,100..900;1,100..900&family=Host+Grotesk:ital,wght@0,300..800;1,300..800&family=Fira+Code:wght@400;500;600;700&display=swap"
           rel="stylesheet"
         />
       </head>
-      <body className="antialiased font-main bg-[#0a0f1e] text-[#f1f5f9] min-h-screen overflow-x-hidden selection:bg-[#e85d04]/30 selection:text-white">
+      <body className="min-h-screen overflow-x-hidden bg-[#0a0f1e] font-main text-[#f1f5f9] antialiased selection:bg-[#e85d04]/30 selection:text-white">
         <NuqsAdapter>{children}</NuqsAdapter>
         <Toaster
           toastOptions={{

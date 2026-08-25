@@ -9,12 +9,18 @@ export default function Home() {
   const envToken = process.env.NEXT_PUBLIC_OS_SECURITY_KEY || ''
 
   return (
-    <Suspense fallback={<div className="flex h-screen items-center justify-center text-sm font-mono text-zinc-400">Loading Agent OS...</div>}>
-      <div className="relative flex h-screen bg-[#0a0f1e] text-[#f1f5f9] overflow-hidden">
+    <Suspense
+      fallback={
+        <div className="flex h-screen items-center justify-center font-mono text-sm text-zinc-400">
+          Loading Agent OS...
+        </div>
+      }
+    >
+      <div className="relative flex h-screen overflow-hidden bg-[#0a0f1e] text-[#f1f5f9]">
         {/* Atmospheric Background from gichogumacharia.tech */}
-        <div className="pointer-events-none fixed inset-0 z-0 bg-grid-dots opacity-40" />
-        <div className="orb-orange -top-40 -right-40 size-[550px] z-0" />
-        <div className="orb-fire -bottom-40 -left-40 size-[480px] z-0" />
+        <div className="bg-grid-dots pointer-events-none fixed inset-0 z-0 opacity-40" />
+        <div className="orb-orange -right-40 -top-40 z-0 size-[550px]" />
+        <div className="orb-fire -bottom-40 -left-40 z-0 size-[480px]" />
 
         {/* Application Layout */}
         <div className="relative z-10 flex size-full">

@@ -17,7 +17,7 @@ const AgentMessage = ({ message }: MessageProps) => {
   let messageContent
   if (message.streamingError) {
     messageContent = (
-      <p className="text-destructive font-mono text-xs">
+      <p className="font-mono text-xs text-destructive">
         Oops! Something went wrong while streaming.{' '}
         {streamingErrorMessage ? (
           <>{streamingErrorMessage}</>
@@ -28,7 +28,7 @@ const AgentMessage = ({ message }: MessageProps) => {
     )
   } else if (message.content) {
     messageContent = (
-      <div className="flex w-full flex-col gap-4 font-main text-zinc-100 text-sm leading-relaxed">
+      <div className="flex w-full flex-col gap-4 font-main text-sm leading-relaxed text-zinc-100">
         <MarkdownRenderer>{message.content}</MarkdownRenderer>
         {message.videos && message.videos.length > 0 && (
           <Videos videos={message.videos} />
@@ -50,7 +50,7 @@ const AgentMessage = ({ message }: MessageProps) => {
       )
     } else {
       messageContent = (
-        <div className="flex w-full flex-col gap-4 font-main text-zinc-100 text-sm leading-relaxed">
+        <div className="flex w-full flex-col gap-4 font-main text-sm leading-relaxed text-zinc-100">
           <MarkdownRenderer>
             {message.response_audio.transcript}
           </MarkdownRenderer>
@@ -70,11 +70,11 @@ const AgentMessage = ({ message }: MessageProps) => {
 
   return (
     <div className="flex w-full justify-start">
-      <div className="flex max-w-[88%] items-start gap-3.5 rounded-3xl rounded-tl-sm border border-white/10 bg-[#0f172a]/80 p-5 text-zinc-100 backdrop-blur-2xl shadow-xl hover:border-white/20 transition-all">
-        <div className="flex-shrink-0 size-8 rounded-xl bg-gradient-to-tr from-[#e85d04] to-[#f48c06] flex items-center justify-center text-white shadow-md shadow-orange-950/50 mt-0.5">
+      <div className="flex max-w-[88%] items-start gap-3.5 rounded-3xl rounded-tl-sm border border-white/10 bg-[#0f172a]/80 p-5 text-zinc-100 shadow-xl backdrop-blur-2xl transition-all hover:border-white/20">
+        <div className="mt-0.5 flex size-8 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-[#e85d04] to-[#f48c06] text-white shadow-md shadow-orange-950/50">
           <Sparkles className="size-4" />
         </div>
-        <div className="flex-1 min-w-0">{messageContent}</div>
+        <div className="min-w-0 flex-1">{messageContent}</div>
       </div>
     </div>
   )
@@ -83,11 +83,11 @@ const AgentMessage = ({ message }: MessageProps) => {
 const UserMessage = memo(({ message }: MessageProps) => {
   return (
     <div className="flex w-full justify-end">
-      <div className="flex max-w-[82%] items-start gap-3 rounded-3xl rounded-tr-sm border border-[#e85d04]/40 bg-gradient-to-tr from-[#e85d04]/20 via-[#f48c06]/15 to-[#dc2f02]/20 p-4 text-white backdrop-blur-2xl shadow-lg shadow-orange-950/20 hover:border-[#e85d04]/60 transition-all">
-        <div className="text-sm font-main text-zinc-100 flex-1 leading-relaxed">
+      <div className="flex max-w-[82%] items-start gap-3 rounded-3xl rounded-tr-sm border border-[#e85d04]/40 bg-gradient-to-tr from-[#e85d04]/20 via-[#f48c06]/15 to-[#dc2f02]/20 p-4 text-white shadow-lg shadow-orange-950/20 backdrop-blur-2xl transition-all hover:border-[#e85d04]/60">
+        <div className="flex-1 font-main text-sm leading-relaxed text-zinc-100">
           {message.content}
         </div>
-        <div className="flex-shrink-0 size-7 rounded-xl bg-white/10 flex items-center justify-center text-zinc-200 border border-white/10 shadow-sm mt-0.5">
+        <div className="mt-0.5 flex size-7 flex-shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/10 text-zinc-200 shadow-sm">
           <User className="size-3.5" />
         </div>
       </div>

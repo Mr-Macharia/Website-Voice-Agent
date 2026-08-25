@@ -13,7 +13,9 @@ async function handleToken(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
     let room = searchParams.get('room') || 'voice-agent-room'
-    let identity = searchParams.get('identity') || `user-${Math.random().toString(36).substring(2, 9)}`
+    let identity =
+      searchParams.get('identity') ||
+      `user-${Math.random().toString(36).substring(2, 9)}`
     let name = searchParams.get('name') || identity
 
     if (req.method === 'POST') {
@@ -28,8 +30,12 @@ async function handleToken(req: NextRequest) {
     }
 
     const apiKey = process.env.LIVEKIT_API_KEY || 'devkey'
-    const apiSecret = process.env.LIVEKIT_API_SECRET || 'secret01234567890123456789012345678901'
-    const wsUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL || process.env.LIVEKIT_URL || 'wss://voice-agent.livekit.cloud'
+    const apiSecret =
+      process.env.LIVEKIT_API_SECRET || 'secret01234567890123456789012345678901'
+    const wsUrl =
+      process.env.NEXT_PUBLIC_LIVEKIT_URL ||
+      process.env.LIVEKIT_URL ||
+      'wss://voice-agent.livekit.cloud'
 
     const at = new AccessToken(apiKey, apiSecret, {
       identity,
@@ -57,7 +63,10 @@ async function handleToken(req: NextRequest) {
   } catch (error) {
     console.error('Error generating LiveKit token:', error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to generate token' },
+      {
+        error:
+          error instanceof Error ? error.message : 'Failed to generate token'
+      },
       { status: 500 }
     )
   }

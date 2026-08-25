@@ -2,7 +2,7 @@
 
 import React from 'react'
 import { Button } from '@/components/ui/button'
-import { Mic, MicOff, PhoneOff, Sparkles } from 'lucide-react'
+import { Mic, MicOff, PhoneOff, Sparkles, Zap, Radio } from 'lucide-react'
 
 interface VoiceAgentControlBarProps {
   isMuted: boolean
@@ -19,55 +19,80 @@ export const VoiceAgentControlBar: React.FC<VoiceAgentControlBarProps> = ({
   onDisconnect,
   isConnected,
   agentName = 'Realtime Voice Assistant',
-  mode = 'LiveKit WebRTC'
+  mode = 'Deepgram Flux TTS'
 }) => {
+  const isLiveKit = mode.toLowerCase().includes('livekit')
+
   return (
-    <div className="flex w-full items-center justify-between border-t border-white/5 bg-[#0a0f1e]/90 px-6 py-4 backdrop-blur-2xl font-main">
+    <div className="flex w-full items-center justify-between border-t border-white/10 bg-[#0a0f1e]/95 px-6 py-3.5 backdrop-blur-2xl">
       {/* Agent Info & Connection Status */}
       <div className="flex items-center gap-3">
-        <div className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-tr from-[#e85d04] to-[#f48c06] text-white shadow-md shadow-orange-950/40">
-          <Sparkles className="size-4" />
-        </div>
-        <div>
-          <div className="text-sm font-large font-bold text-white">{agentName}</div>
-          <div className="flex items-center gap-1.5 text-xs font-mono text-zinc-400">
+        <div className="relative flex size-10 items-center justify-center rounded-xl bg-gradient-to-tr from-[#e85d04] to-[#f48c06] text-white shadow-lg shadow-orange-950/40 ring-1 ring-white/20">
+          <Sparkles className="size-4.5" />
+          <span className="absolute -bottom-0.5 -right-0.5 flex size-2.5">
             <span
-              className={`size-1.5 rounded-full ${
-                isConnected ? 'bg-[#22c55e] shadow-[0_0_6px_#22c55e]' : 'bg-[#e85d04] animate-pulse'
+              className={`size-full rounded-full ${
+                isConnected
+                  ? 'animate-ping bg-emerald-400 opacity-75'
+                  : 'bg-amber-400'
               }`}
             />
-            <span>{isConnected ? mode : 'Connecting...'}</span>
+            <span
+              className={`absolute inset-0 size-2.5 rounded-full ${
+                isConnected ? 'bg-emerald-500' : 'bg-amber-500'
+              }`}
+            />
+          </span>
+        </div>
+
+        <div className="flex flex-col">
+          <div className="text-sm font-semibold tracking-tight text-white">
+            {agentName}
+          </div>
+          <div className="flex items-center gap-1.5 font-mono text-[11px] text-zinc-400">
+            {isLiveKit ? (
+              <Radio className="size-3 text-sky-400" />
+            ) : (
+              <Zap className="size-3 text-[#f48c06]" />
+            )}
+            <span className="text-zinc-300">
+              {isConnected ? mode : 'Connecting...'}
+            </span>
           </div>
         </div>
       </div>
 
       {/* Main Control Actions */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2.5">
         {/* Mute / Unmute Button */}
         <Button
           variant="outline"
           size="icon"
           onClick={onToggleMute}
           disabled={!isConnected}
-          className={`size-11 rounded-full border transition-all ${
+          className={`size-10 rounded-full border transition-all ${
             isMuted
-              ? 'border-rose-500/50 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20'
-              : 'border-white/10 bg-white/5 text-zinc-200 hover:bg-white/10 hover:text-white'
+              ? 'border-rose-500/50 bg-rose-500/20 text-rose-300 shadow-md shadow-rose-950/40 hover:bg-rose-500/30'
+              : 'border-white/10 bg-white/5 text-zinc-200 hover:border-white/20 hover:bg-white/10 hover:text-white'
           }`}
-          title={isMuted ? 'Unmute microphone' : 'Mute microphone'}
+          title={isMuted ? 'Unmute Microphone' : 'Mute Microphone'}
         >
-          {isMuted ? <MicOff className="size-5" /> : <Mic className="size-5" />}
+          {isMuted ? (
+            <MicOff className="size-4.5 text-rose-400" />
+          ) : (
+            <Mic className="size-4.5 text-zinc-200" />
+          )}
         </Button>
 
-        {/* Disconnect / End Call Button */}
+        {/* Disconnect / End Session Button */}
         <Button
           variant="destructive"
           size="icon"
           onClick={onDisconnect}
-          className="size-11 rounded-full bg-gradient-to-tr from-[#dc2f02] to-rose-600 text-white shadow-lg shadow-rose-950/50 transition-all hover:brightness-110 hover:scale-105 active:scale-95"
-          title="Disconnect Voice Session"
+          className="size-10 rounded-full bg-gradient-to-tr from-[#dc2f02] to-rose-600 text-white shadow-lg shadow-rose-950/60 transition-all hover:scale-105 hover:brightness-110 active:scale-95"
+          title="End Voice Session"
         >
-          <PhoneOff className="size-5" />
+          <PhoneOff className="size-4.5" />
         </Button>
       </div>
     </div>
