@@ -16,9 +16,9 @@ WORKSPACE_DIR = BACKEND_DIR.parent
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-load_dotenv(BACKEND_DIR / ".env")
-load_dotenv(WORKSPACE_DIR / ".env")
-load_dotenv()
+load_dotenv(BACKEND_DIR / ".env", override=True)
+load_dotenv(WORKSPACE_DIR / ".env", override=True)
+load_dotenv(override=True)
 
 from livekit.agents import AgentServer, AgentSession, Agent, inference, room_io
 from livekit.plugins import deepgram, silero

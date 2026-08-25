@@ -5,8 +5,7 @@ FastAPI & Agno AgentOS server powering real-time voice streaming with Deepgram (
 ## Features
 
 - **Agno AgentOS & Agents**:
-  - `voice-agent`: High-speed, concise conversational assistant designed for real-time speech synthesis.
-  - `research-agent`: Web search and knowledge synthesis agent.
+  - `voice-agent`: High-speed, concise conversational assistant designed for real-time speech synthesis, with a DuckDuckGo web search tool for current information (news, weather, prices, events).
   - SQLite persistent session & memory database (`agno.db`).
 - **Deepgram Audio Pipeline**:
   - `POST /api/stt`: Multi-format speech-to-text with Deepgram Nova-3.

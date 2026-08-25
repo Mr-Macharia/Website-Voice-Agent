@@ -5,7 +5,7 @@ as MCP tools so opencode (or any MCP client) can drive the voice pipeline.
 
 Covers:
 - Deepgram STT (nova-3) + TTS (aura-luna-en / flux via REST)
-- Agno voice-agent + research-agent (with SQLite session memory agno.db)
+- Agno voice-agent with DuckDuckGo web search (SQLite session memory agno.db)
 - LiveKit token generation + room management (livekit-api)
 - Health/status mirroring server.py:/api/info
 
@@ -25,11 +25,12 @@ from typing import Any, Optional
 from dotenv import load_dotenv
 
 # Load .env from backend and workspace root
+# override=True so values from this file win over empty env vars preset by MCP clients
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 WORKSPACE_DIR = BACKEND_DIR.parent
-load_dotenv(BACKEND_DIR / ".env")
-load_dotenv(WORKSPACE_DIR / ".env")
-load_dotenv()  # also cwd
+load_dotenv(BACKEND_DIR / ".env", override=True)
+load_dotenv(WORKSPACE_DIR / ".env", override=True)
+load_dotenv(override=True)  # also cwd
 
 try:
     from mcp.server.fastmcp import FastMCP
@@ -39,8 +40,8 @@ except ImportError as e:
 mcp = FastMCP(
     name="voice-agent",
     instructions=(
-        "Voice Agent control plane: Deepgram STT/TTS, Agno agents (voice + research), "
-        "LiveKit rooms/tokens. Mirrors server.py and livekit_worker.py for MCP clients."
+        "Voice Agent control plane: Deepgram STT/TTS, Agno realtime voice assistant "
+        "with web search, LiveKit rooms/tokens. Mirrors server.py and livekit_worker.py for MCP clients."
     ),
 )
 
@@ -60,11 +61,7 @@ def _get_livekit_creds() -> tuple[str, str, str]:
     )
 
 
-# ---------------------------------------------------------------------------
-# Agno agents (lazy singleton matching server.py:126,140)
-# ---------------------------------------------------------------------------
 _voice_agent: Any = None
-_research_agent: Any = None
 
 
 def _get_voice_agent():
@@ -75,6 +72,36 @@ def _get_voice_agent():
     from agno.models.xai import xAI
     from agno.models.openai import OpenAIChat
     from agno.db.sqlite import SqliteDb
+    from agno.tools import Toolkit
+
+    class WebSearchTools(Toolkit):
+        def __init__(self):
+            super().__init__(name="web_search_tools")
+            self.register(self.search_web)
+
+        def search_web(self, query: str) -> str:
+            """Search the web for up-to-date information such as news, weather, facts, prices, or events.
+
+            Args:
+                query (str): Search topic or query string.
+            Returns:
+                str: Titles and summaries of the top web results.
+            """
+            try:
+                from ddgs import DDGS
+
+                results = DDGS().text(query, max_results=4)
+                if not results:
+                    return f"No search results found for {query}."
+                formatted = []
+                for r in results:
+                    title = (r.get("title") or "").strip()
+                    body = (r.get("body") or "").strip()
+                    if title or body:
+                        formatted.append(f"Title: {title}\nSummary: {body}")
+                return "\n\n".join(formatted) if formatted else f"No search results found for {query}."
+            except Exception as e:
+                return f"Search service temporarily offline: {e}"
 
     db = SqliteDb(
         db_file=str(BACKEND_DIR / "agno.db"),
@@ -114,6 +141,7 @@ def _get_voice_agent():
         id="voice-agent",
         name="Realtime Voice Assistant",
         model=llm,
+        tools=[WebSearchTools()],
         description="Fast, conversational virtual assistant speaking naturally over voice.",
         instructions=[prompt_text],
         markdown=False,
@@ -124,61 +152,6 @@ def _get_voice_agent():
         add_datetime_to_context=True,
     )
     return _voice_agent
-
-
-def _get_research_agent():
-    global _research_agent
-    if _research_agent is not None:
-        return _research_agent
-    from agno.agent import Agent
-    from agno.models.xai import xAI
-    from agno.models.openai import OpenAIChat
-    from agno.db.sqlite import SqliteDb
-    from agno.tools import Toolkit
-    import urllib.request, urllib.parse, json as _json
-
-    class WebSearchTools(Toolkit):
-        def __init__(self):
-            super().__init__(name="web_search_tools")
-            self.register(self.search_web)
-
-        def search_web(self, query: str) -> str:
-            try:
-                url = f"https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch={urllib.parse.quote(query)}&format=json&utf8=1"
-                req = urllib.request.Request(url, headers={"User-Agent": "AgnoAgentOS/1.0"})
-                with urllib.request.urlopen(req, timeout=6) as r:
-                    data = _json.loads(r.read().decode())
-                    results = data.get("query", {}).get("search", [])
-                    if not results:
-                        return f"No results for {query}."
-                    return "\n\n".join(
-                        f"Title: {x.get('title')}\nSummary: {x.get('snippet','').replace('<span class=\"searchmatch\">','').replace('</span>','')}"
-                        for x in results[:4]
-                    )
-            except Exception as e:
-                return f"Search offline: {e}"
-
-    db = SqliteDb(db_file="agno.db", session_table="agent_sessions", memory_table="user_memories")
-    xai_key = os.getenv("XAI_API_KEY")
-    openai_key = os.getenv("OPENAI_API_KEY")
-    if xai_key:
-        llm = xAI(id="grok-4.20-0309-non-reasoning", api_key=xai_key)
-    else:
-        llm = OpenAIChat(id="gpt-4o", api_key=openai_key) if openai_key else OpenAIChat(id="gpt-4o-mini")
-
-    _research_agent = Agent(
-        id="research-agent",
-        name="Knowledge & Research Agent",
-        model=llm,
-        tools=[WebSearchTools()],
-        description="Knowledge and web research agent with search.",
-        instructions=["Search the web to provide accurate, up-to-date info.", "Structure responses clearly."],
-        markdown=True,
-        db=db,
-        add_history_to_context=True,
-        num_history_runs=5,
-    )
-    return _research_agent
 
 
 # ---------------------------------------------------------------------------
@@ -401,33 +374,6 @@ async def agno_voice_run(
 
 
 @mcp.tool()
-async def agno_research_run(
-    query: str,
-    session_id: Optional[str] = None,
-) -> str:
-    """
-    Run the Agno research-agent (server.py:140) with web search tool.
-
-    Args:
-        query: Research question/topic.
-        session_id: Optional session id.
-    Returns:
-        Markdown research answer.
-    """
-    agent = _get_research_agent()
-    sid = session_id or f"research-{uuid.uuid4().hex[:8]}"
-    try:
-        try:
-            res = await agent.arun(query, session_id=sid)  # type: ignore
-            return getattr(res, "content", str(res)) or str(res)
-        except Exception:
-            res = agent.run(query, session_id=sid)  # type: ignore
-            return getattr(res, "content", str(res)) or str(res)
-    except Exception as e:
-        return f"Error running research agent: {e}"
-
-
-@mcp.tool()
 def agno_list_sessions(limit: int = 10) -> str:
     """
     List recent Agno sessions from agno.db (sqlite).
@@ -587,7 +533,7 @@ def health_check() -> str:
         {
             "status": "ok",
             "service": "voice-agent-mcp",
-            "agents": ["voice-agent", "research-agent"],
+            "agents": ["voice-agent"],
             "livekit_url": lk_url,
             "deepgram_enabled": bool(_get_deepgram_api_key()),
             "db_exists": db_path.exists(),

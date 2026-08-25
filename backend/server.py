@@ -9,10 +9,10 @@ WORKSPACE_DIR = BACKEND_DIR.parent
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-# Load .env from backend and root
-load_dotenv(BACKEND_DIR / ".env")
-load_dotenv(WORKSPACE_DIR / ".env")
-load_dotenv()
+# Load .env from backend and root (override so .env values win over empty preset vars)
+load_dotenv(BACKEND_DIR / ".env", override=True)
+load_dotenv(WORKSPACE_DIR / ".env", override=True)
+load_dotenv(override=True)
 
 import asyncio
 import json
@@ -39,27 +39,26 @@ class WebSearchTools(Toolkit):
         self.register(self.search_web)
 
     def search_web(self, query: str) -> str:
-        """Search the web for up-to-date information, facts, or definitions.
+        """Search the web for up-to-date information such as news, weather, facts, prices, or events.
 
         Args:
             query (str): Search topic or query string.
         Returns:
-            str: Summaries and search results.
+            str: Titles and summaries of the top web results.
         """
-        import urllib.request, urllib.parse, json
         try:
-            url = f"https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch={urllib.parse.quote(query)}&format=json&utf8=1"
-            req = urllib.request.Request(url, headers={"User-Agent": "AgnoAgentOS/1.0"})
-            with urllib.request.urlopen(req, timeout=6) as response:
-                data = json.loads(response.read().decode())
-                results = data.get("query", {}).get("search", [])
-                if not results:
-                    return f"No direct search results found for {query}."
-                formatted = []
-                for r in results[:4]:
-                    snippet = r.get("snippet", "").replace('<span class="searchmatch">', "").replace("</span>", "")
-                    formatted.append(f"Title: {r.get('title')}\nSummary: {snippet}")
-                return "\n\n".join(formatted)
+            from ddgs import DDGS
+
+            results = DDGS().text(query, max_results=4)
+            if not results:
+                return f"No search results found for {query}."
+            formatted = []
+            for r in results:
+                title = (r.get("title") or "").strip()
+                body = (r.get("body") or "").strip()
+                if title or body:
+                    formatted.append(f"Title: {title}\nSummary: {body}")
+            return "\n\n".join(formatted) if formatted else f"No search results found for {query}."
         except Exception as e:
             return f"Search service temporarily offline: {e}"
 
@@ -85,10 +84,8 @@ openai_key = os.getenv("OPENAI_API_KEY")
 # Select primary model
 if xai_key:
     llm_model = xAI(id="grok-4.20-0309-non-reasoning", api_key=xai_key)
-    research_model = xAI(id="grok-4.20-0309-non-reasoning", api_key=xai_key)
 else:
     llm_model = OpenAIChat(id="gpt-4o-mini", api_key=openai_key)
-    research_model = OpenAIChat(id="gpt-4o", api_key=openai_key)
 
 VOICE_AGENT_SYSTEM_PROMPT = """
 ## CRITICAL: YOU ARE A TEXT GENERATOR FOR A REAL-TIME VOICE SYSTEM
@@ -106,6 +103,8 @@ FORMATTING RULES (CRITICAL):
 RESPONSE GUIDELINES:
 - Keep most responses to 1-2 short, natural sentences (under 120 characters, max 300 when detail is requested).
 - You have instant access to information. Never say "Let me check", "One moment", or "Hold on" — respond directly as if the information is already in front of you.
+- Use your web search tool ONLY for current information you don't reliably know: news, weather, prices, scores, recent events. Never search for general knowledge or chitchat.
+- When you use search results, answer in one short spoken sentence with just what the caller asked for — no titles, URLs, or source lists.
 - Pause after questions to allow for replies. Confirm what the customer said if uncertain. Never interrupt.
 - End responses with a clear question or prompt to keep the conversation flowing smoothly when appropriate.
 - Speak in natural, flowing conversational sentences instead of lists.
@@ -173,6 +172,7 @@ voice_agent = Agent(
     id="voice-agent",
     name="Realtime Voice Assistant",
     model=llm_model,
+    tools=[WebSearchTools()],
     description="Fast, conversational virtual assistant speaking naturally over voice.",
     instructions=[VOICE_AGENT_SYSTEM_PROMPT],
     markdown=False,
@@ -180,24 +180,6 @@ voice_agent = Agent(
     add_history_to_context=True,
     num_history_runs=4,
     enable_session_summaries=False,
-    add_datetime_to_context=True,
-)
-
-research_agent = Agent(
-    id="research-agent",
-    name="Knowledge & Research Agent",
-    model=research_model,
-    tools=[WebSearchTools()],
-    description="Knowledge and web research agent with search capabilities.",
-    instructions=[
-        "Search the web to provide accurate, up-to-date information.",
-        "Structure responses clearly with headings and source references."
-    ],
-    markdown=True,
-    db=db,
-    add_history_to_context=True,
-    num_history_runs=5,
-    enable_session_summaries=True,
     add_datetime_to_context=True,
 )
 
@@ -231,7 +213,7 @@ async def info_check():
     return {
         "status": "ok",
         "service": "agno-agent-os",
-        "agents": ["voice-agent", "research-agent"],
+        "agents": ["voice-agent"],
         "livekit_url": LIVEKIT_URL,
         "deepgram_enabled": bool(DEEPGRAM_API_KEY)
     }
@@ -789,7 +771,7 @@ async def deepgram_agent_websocket(client_ws: WebSocket):
 # ---------------------------------------------------------------------------
 agent_os = AgentOS(
     description="Agno Realtime Voice Assistant OS",
-    agents=[voice_agent, research_agent],
+    agents=[voice_agent],
     base_app=base_app,
 )
 
