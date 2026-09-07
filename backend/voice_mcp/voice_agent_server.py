@@ -110,7 +110,12 @@ def _get_voice_agent():
     )
     xai_key = os.getenv("XAI_API_KEY")
     openai_key = os.getenv("OPENAI_API_KEY")
-    if xai_key:
+    bedrock_url = os.getenv("BEDROCK_BASE_URL", "https://bedrock-mantle.us-east-1.api.aws/v1")
+    bedrock_key = os.getenv("BEDROCK_API_KEY")
+    bedrock_model = os.getenv("BEDROCK_MODEL_ID", "nvidia.nemotron-nano-3-30b")
+    if bedrock_key:
+        llm = OpenAIChat(id=bedrock_model, api_key=bedrock_key, base_url=bedrock_url)
+    elif xai_key:
         llm = xAI(id="grok-4.20-0309-non-reasoning", api_key=xai_key)
     else:
         llm = OpenAIChat(id="gpt-4o-mini", api_key=openai_key)

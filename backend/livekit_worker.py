@@ -21,7 +21,7 @@ load_dotenv(WORKSPACE_DIR / ".env", override=True)
 load_dotenv(override=True)
 
 from livekit.agents import AgentServer, AgentSession, Agent, inference, room_io
-from livekit.plugins import deepgram, silero
+from livekit.plugins import deepgram
 
 # Keep Agno for reference / future hybrid; not used directly in AgentSession LLM
 # (AgentSession LLM is livekit.plugins.openai.LLM for low-latency streaming)
@@ -42,8 +42,17 @@ db = SqliteDb(
 # LiveKit plugins.openai.LLM is OpenAI-compatible, so xAI works via base_url
 # ---------------------------------------------------------------------------
 def _create_llm():
+    bedrock_url = os.getenv("BEDROCK_BASE_URL", "https://bedrock-mantle.us-east-1.api.aws/v1")
+    bedrock_key = os.getenv("BEDROCK_API_KEY")
+    bedrock_model = os.getenv("BEDROCK_MODEL_ID", "nvidia.nemotron-nano-3-30b")
     xai_key = os.getenv("XAI_API_KEY")
     openai_key = os.getenv("OPENAI_API_KEY")
+
+    if bedrock_key:
+        from livekit.plugins import openai as lk_openai
+
+        logger.info("Using Amazon Bedrock LLM for LiveKit session via OpenAI-compatible endpoint")
+        return lk_openai.LLM(model=bedrock_model, api_key=bedrock_key, base_url=bedrock_url)
 
     # Prefer OpenAI plugin if OPENAI_API_KEY set
     if openai_key:
@@ -114,26 +123,17 @@ async def entrypoint(ctx):
         sample_rate=24000,
     )
 
-    # Explicit VAD tuned for confident speech only — prevents Brave false triggers and mid-phrase cut
-    # Higher silence (0.75) + speech (0.15) + threshold (0.55) enforces Never interrupt
-    vad = silero.VAD.load(
-        min_speech_duration=0.15,
-        min_silence_duration=0.75,
-        prefix_padding_duration=0.4,
-        activation_threshold=0.55,
-        sample_rate=16000,
-    )
-
+    # STT endpointing owns turn boundaries — Deepgram final transcripts commit turns.
+    # Timing preserves prior VAD semantics: min 1.0s / max 3.5s, interruptions disabled.
     session = AgentSession(
         stt=stt,
-        vad=vad,
         llm=llm,
         tts=tts,
-        turn_detection="vad",
-        # Never interrupt — barge-in disabled for natural confident turns; re-enable with debounce if needed
-        allow_interruptions=False,
-        min_endpointing_delay=1.0,
-        max_endpointing_delay=3.5,
+        turn_handling={
+            "turn_detection": "stt",
+            "endpointing": {"min_delay": 1.0, "max_delay": 3.5},
+            "interruption": {"enabled": False},
+        },
     )
 
     # RoomOptions with noise cancellation if available

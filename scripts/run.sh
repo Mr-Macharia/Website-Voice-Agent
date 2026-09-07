@@ -134,6 +134,9 @@ fi
 if [[ -z "${XAI_API_KEY:-}" && -z "${OPENAI_API_KEY:-}" ]] && ! grep -q "XAI_API_KEY" "$ROOT/.env" 2>/dev/null && ! grep -q "OPENAI_API_KEY" "$ROOT/.env" 2>/dev/null; then
   echo -e "\033[33m[warn] Neither XAI_API_KEY nor OPENAI_API_KEY set — LLM will use LiveKit Inference\033[0m"
 fi
+if [[ -z "${BEDROCK_API_KEY:-}" ]] && ! grep -q "BEDROCK_API_KEY" "$ROOT/.env" 2>/dev/null; then
+  echo -e "\033[33m[warn] BEDROCK_API_KEY not set — LLM falls back to Grok/OpenAI instead of Bedrock\033[0m"
+fi
 
 if [[ "$RUN_BACKEND" == true ]]; then
   echo -e "${C_DIM}→ starting backend: ${BACKEND_CMD[*]} (cwd=backend)${C_RESET}"

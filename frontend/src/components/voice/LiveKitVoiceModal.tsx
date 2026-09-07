@@ -216,6 +216,11 @@ const DirectVoiceSession: React.FC<{
   const bargeInCooldownRef = useRef(0)
   const vadHistoryRef = useRef<boolean[]>([])
   const turnIdRef = useRef(0)
+  const turnActiveRef = useRef(false)
+  const lastVadLogRef = useRef(0)
+  const sourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null)
+  const analyserNodeRef = useRef<AnalyserNode | null>(null)
+  const zeroGainRef = useRef<GainNode | null>(null)
 
   useEffect(() => {
     isMutedRef.current = isMuted
@@ -291,8 +296,12 @@ const DirectVoiceSession: React.FC<{
     isFirstChunkRef.current = true
     lastTurnCompleteRef.current = false
     isAgentSpeakingRef.current = false
-    // Notify backend to cancel Flux TTS turn (Flux Interrupt) — frontend already debounced
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+    // Only interrupt when a turn is active or TTS is actually playing (avoids cancelling turn 1 on PTT press 2)
+    if (
+      (turnActiveRef.current || activeSourcesRef.current.length > 0) &&
+      wsRef.current &&
+      wsRef.current.readyState === WebSocket.OPEN
+    ) {
       try {
         wsRef.current.send(JSON.stringify({ type: 'Interrupt' }))
       } catch {}
@@ -439,7 +448,10 @@ const DirectVoiceSession: React.FC<{
     const wavBuffer = encodeWavBuffer(downsampled, 16000)
 
     // Keep 50ms floor (800 samples @16k) so "yes"/"no" not dropped, but confident turns <400ms still filtered if silence-triggered
-    if (downsampled.length < 800) return
+    if (downsampled.length < 800) {
+      console.debug(`[VAD] Dropped sub-floor turn (${downsampled.length} samples)`)
+      return
+    }
     // If total speech <400ms (6400 samples) and triggered by silence, likely false trigger — keep but log
     const totalMs = (downsampled.length / 16000) * 1000
     if (totalMs < 400) {
@@ -447,9 +459,9 @@ const DirectVoiceSession: React.FC<{
         `[VAD] Short turn ${totalMs.toFixed(0)}ms — still sending (confident check passed)`
       )
     }
-
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       turnIdRef.current += 1
+      turnActiveRef.current = true
       setVoiceState('thinking')
       setStatusMessage('Processing speech (Deepgram Flux)...')
       setAgentText('')
@@ -463,7 +475,12 @@ const DirectVoiceSession: React.FC<{
       } catch (err) {
         console.error('Failed to send WAV buffer:', err)
         setVoiceState('listening')
+        turnActiveRef.current = false
       }
+    } else {
+      toast.error('Voice connection lost — reconnecting')
+      setVoiceState('listening')
+      setStatusMessage('Connection lost. Reopen the voice dialog to reconnect.')
     }
   }
 
@@ -571,6 +588,7 @@ const DirectVoiceSession: React.FC<{
             }
 
             lastTurnCompleteRef.current = true
+            turnActiveRef.current = false
             const completedTurnId = turnIdRef.current
             // Wait for jitter buffer to drain: poll until empty, but ignore if new turn started
             const checkDone = () => {
@@ -590,8 +608,8 @@ const DirectVoiceSession: React.FC<{
             // Brave 120ms buffer: wait a bit longer than before to let jitter drain
             setTimeout(checkDone, 180)
           } else if (parsed.type === 'no_speech') {
+            turnActiveRef.current = false
             setVoiceState('listening')
-            setStatusMessage('Listening for your voice...')
           } else if (parsed.type === 'error') {
             toast.error(parsed.message || 'Voice Turn Error')
           }
@@ -678,6 +696,18 @@ const DirectVoiceSession: React.FC<{
       if (vadHistoryRef.current.length > 12) vadHistoryRef.current.shift()
       const voicedCount = vadHistoryRef.current.filter(Boolean).length
       const isVoiceActive = voicedCount >= 7 // 7/12 majority
+      try {
+        if (
+          typeof localStorage !== 'undefined' &&
+          localStorage.getItem('voice-vad-debug') &&
+          Date.now() - lastVadLogRef.current > 1000
+        ) {
+          lastVadLogRef.current = Date.now()
+          console.debug(
+            `[VAD] rms=${rms.toFixed(4)} threshold=${speechThreshold.toFixed(4)} voiced=${voicedCount}/12 recording=${isRecordingAudioRef.current}`
+          )
+        }
+      } catch {}
 
       if (!isPushToTalkRef.current) {
         const now = Date.now()
@@ -707,6 +737,7 @@ const DirectVoiceSession: React.FC<{
             ) {
               isSpeakingRef.current = true
               startAudioRecording()
+              setStatusMessage('Heard you — recording...')
             } else {
               // Still buffering pre-roll, not yet recording
               return
@@ -767,7 +798,9 @@ const DirectVoiceSession: React.FC<{
             } catch {}
           }
           const source = ctx.createMediaStreamSource(stream)
+          sourceNodeRef.current = source
           const analyser = ctx.createAnalyser()
+          analyserNodeRef.current = analyser
           analyser.fftSize = 256
           analyser.smoothingTimeConstant = 0.3
 
@@ -775,6 +808,7 @@ const DirectVoiceSession: React.FC<{
           let workletNode: AudioWorkletNode | null = null
           const zeroGain = ctx.createGain()
           zeroGain.gain.value = 0
+          zeroGainRef.current = zeroGain
 
           const setupAnalyserLoop = () => {
             const dataArray = new Uint8Array(analyser.frequencyBinCount)
@@ -834,9 +868,7 @@ const DirectVoiceSession: React.FC<{
         setStatusMessage('Microphone access denied. You can still type below.')
       }
     }
-
-    initMic()
-
+    void initMic()
     return () => {
       isMounted = false
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current)
@@ -860,15 +892,40 @@ const DirectVoiceSession: React.FC<{
         } catch {}
         workletNodeRef.current = null
       }
+      try {
+        sourceNodeRef.current?.disconnect()
+      } catch {}
+      try {
+        analyserNodeRef.current?.disconnect()
+      } catch {}
+      try {
+        zeroGainRef.current?.disconnect()
+      } catch {}
+      sourceNodeRef.current = null
+      analyserNodeRef.current = null
+      zeroGainRef.current = null
       stopAudioPlayback()
       if (audioCtxRef.current) {
-        // Don't close permanently; suspend to allow reuse on modal reopen (Chrome limits resumed contexts)
         try {
           if (audioCtxRef.current.state !== 'closed') {
-            audioCtxRef.current.suspend().catch(() => {})
+            audioCtxRef.current.close().catch(() => {})
           }
         } catch {}
       }
+      audioCtxRef.current = null
+      gainNodeRef.current = null
+      mediaStreamRef.current = null
+      wsRef.current = null
+      sampleBufferRef.current = []
+      preRollBufferRef.current = []
+      vadHistoryRef.current = []
+      noiseFloorRef.current = 0.015
+      consecutiveVoiceFramesRef.current = 0
+      consecutiveSilenceFramesRef.current = 0
+      isRecordingAudioRef.current = false
+      isSpeakingRef.current = false
+      nextStartTimeRef.current = 0
+      resumePromiseRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedEndpoint, agentName, setMessages])
@@ -980,6 +1037,7 @@ const DirectVoiceSession: React.FC<{
     }
     stopAudioPlayback()
     turnIdRef.current += 1
+    turnActiveRef.current = true
     isFirstChunkRef.current = true
     lastTurnCompleteRef.current = false
     setUserTranscript(text.trim())
@@ -996,6 +1054,7 @@ const DirectVoiceSession: React.FC<{
 
   const handleManualPushToTalkStart = () => {
     if (isMuted) return
+    if (isRecordingAudioRef.current) return
     stopAudioPlayback()
     setIsManualRecording(true)
     startAudioRecording()
@@ -1003,6 +1062,8 @@ const DirectVoiceSession: React.FC<{
 
   const handleManualPushToTalkEnd = () => {
     setIsManualRecording(false)
+    if (!isRecordingAudioRef.current && sampleBufferRef.current.length === 0)
+      return
     stopAudioRecordingAndSend()
   }
 
@@ -1251,11 +1312,17 @@ const DirectVoiceSession: React.FC<{
             {isPushToTalk ? (
               <div className="flex w-full max-w-sm justify-center">
                 <button
-                  onMouseDown={handleManualPushToTalkStart}
-                  onMouseUp={handleManualPushToTalkEnd}
-                  onTouchStart={handleManualPushToTalkStart}
-                  onTouchEnd={handleManualPushToTalkEnd}
-                  className={`relative flex select-none items-center gap-2 rounded-full px-9 py-3 font-mono text-xs font-semibold text-white shadow-xl transition-all ${
+                  onPointerDown={(e) => {
+                    e.currentTarget.setPointerCapture(e.pointerId)
+                    handleManualPushToTalkStart()
+                  }}
+                  onPointerUp={handleManualPushToTalkEnd}
+                  onPointerCancel={handleManualPushToTalkEnd}
+                  onLostPointerCapture={() => {
+                    if (isRecordingAudioRef.current) handleManualPushToTalkEnd()
+                  }}
+                  onContextMenu={(e) => e.preventDefault()}
+                  className={`relative flex touch-none select-none items-center gap-2 rounded-full px-9 py-3 font-mono text-xs font-semibold text-white shadow-xl transition-all ${
                     isManualRecording
                       ? 'scale-95 bg-rose-600 shadow-rose-950/60 ring-4 ring-rose-500/40'
                       : 'bg-gradient-to-tr from-[#e85d04] to-[#f48c06] shadow-orange-950/50 hover:brightness-110 active:scale-95'

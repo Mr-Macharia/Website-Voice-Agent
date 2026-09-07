@@ -80,9 +80,14 @@ db = SqliteDb(
 # ---------------------------------------------------------------------------
 xai_key = os.getenv("XAI_API_KEY")
 openai_key = os.getenv("OPENAI_API_KEY")
+bedrock_url = os.getenv("BEDROCK_BASE_URL", "https://bedrock-mantle.us-east-1.api.aws/v1")
+bedrock_key = os.getenv("BEDROCK_API_KEY")
+bedrock_model = os.getenv("BEDROCK_MODEL_ID", "nvidia.nemotron-nano-3-30b")
 
-# Select primary model
-if xai_key:
+# Select primary model — Bedrock first, existing fallbacks untouched
+if bedrock_key:
+    llm_model = OpenAIChat(id=bedrock_model, api_key=bedrock_key, base_url=bedrock_url)
+elif xai_key:
     llm_model = xAI(id="grok-4.20-0309-non-reasoning", api_key=xai_key)
 else:
     llm_model = OpenAIChat(id="gpt-4o-mini", api_key=openai_key)
@@ -520,9 +525,28 @@ async def voice_websocket(client_ws: WebSocket):
                             pass
                     break
                 except Exception as e:
+                    msg = str(e).lower()
+                    if "disconnect" in msg and ("receive" in msg or isinstance(e, RuntimeError)):
+                        print("Voice WebSocket client disconnected (recv)")
+                        if turn_task and not turn_task.done():
+                            turn_task.cancel()
+                            try:
+                                await turn_task
+                            except asyncio.CancelledError:
+                                pass
+                        break
                     print(f"Voice WS recv error: {e}")
                     recv_task = asyncio.create_task(client_ws.receive())
                     continue
+                if message.get("type") == "websocket.disconnect" or ("code" in message and "text" not in message and "bytes" not in message):
+                    print("Voice WebSocket client disconnected (recv)")
+                    if turn_task and not turn_task.done():
+                        turn_task.cancel()
+                        try:
+                            await turn_task
+                        except asyncio.CancelledError:
+                            pass
+                    break
                 # Schedule next recv immediately
                 recv_task = asyncio.create_task(client_ws.receive())
 
