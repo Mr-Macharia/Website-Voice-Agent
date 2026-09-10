@@ -7,6 +7,7 @@ Unified voice: flux-brooke-en (Deepgram Flux v2)
 import asyncio
 import logging
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -53,6 +54,8 @@ _NOISY_LOGGERS = (
     "hickory_resolver",
     "hickory_proto",
     "h2",
+    "hpack",
+    "hyperframe",
     "hyper_util",
     "hyper",
     "cookie_store",
@@ -160,7 +163,11 @@ db = SqliteDb(
 def _create_llm():
     bedrock_url = os.getenv("BEDROCK_BASE_URL", "https://bedrock-mantle.us-east-1.api.aws/v1")
     bedrock_key = os.getenv("BEDROCK_API_KEY")
-    bedrock_model = os.getenv("BEDROCK_MODEL_ID", "nvidia.nemotron-nano-3-30b")
+    # nemotron-nano-3-30b could not reliably emit tool calls once the chat had
+    # any conversational history: it printed 'search_web(...)' as literal text or
+    # invented the answer outright (measured 0/2; temperature made no
+    # difference). qwen3-next-80b scored 2/2 at comparable latency.
+    bedrock_model = os.getenv("BEDROCK_MODEL_ID", "qwen.qwen3-next-80b-a3b-instruct")
     xai_key = os.getenv("XAI_API_KEY")
     openai_key = os.getenv("OPENAI_API_KEY")
 
@@ -231,6 +238,34 @@ async def search_web(query: str) -> str:
         return f"Search service temporarily offline: {e}"
 
 
+# ---------------------------------------------------------------------------
+# Agent with markdown stripped before speech.
+#
+# Qwen still emits markdown emphasis for titles (*The Drowning Pool*) despite
+# being told not to, and TTS reads those symbols aloud. Strip them in the TTS
+# path so the spoken audio is clean while the transcript keeps the original
+# text.
+# ---------------------------------------------------------------------------
+_MARKDOWN_RE = re.compile(r"(\*{1,3}|_{1,3}|`{1,3}|~{2})")
+
+
+def _strip_markup(text: str) -> str:
+    # Only remove emphasis/code markers, never sentence punctuation.
+    return _MARKDOWN_RE.sub("", text)
+
+
+class VoiceAgent(Agent):
+    async def tts_node(self, text, model_settings):
+        async def cleaned():
+            async for chunk in text:
+                out = _strip_markup(chunk)
+                if out:
+                    yield out
+
+        async for frame in Agent.default.tts_node(self, cleaned(), model_settings):
+            yield frame
+
+
 VOICE_AGENT_INSTRUCTIONS = (
     #
     # Persona. Target: quiet charisma — warm, relaxed, genuinely present.
@@ -272,6 +307,15 @@ VOICE_AGENT_INSTRUCTIONS = (
     "Never say you cannot access live information, and never invent such facts. "
     "After searching, give just what they asked for in a spoken sentence, no titles or URLs. "
     #
+    # Nemotron sometimes WRITES the tool call as text instead of emitting one,
+    # then improvises an answer from nothing. Both halves are banned explicitly.
+    "Invoke the tool properly — never write, say, or read out the tool call itself. Text like "
+    "'search_web(...)' or 'let me check that' must never appear in your reply. "
+    "You have NO knowledge of current weather, news, or prices except what search_web returns. "
+    "If you have not just received search results, you do not know the answer — say so or ask "
+    "which place they mean; never describe conditions, temperatures, or forecasts from memory. "
+    "For weather, you must know WHICH place. If they haven't said, ask before searching. "
+    #
     # Voice formatting.
     "Usually two or three spoken sentences — enough to actually say something, short enough to "
     "stay a conversation. Four is the ceiling; if asked to say more, add substance, not padding, "
@@ -280,7 +324,9 @@ VOICE_AGENT_INSTRUCTIONS = (
     "no metaphors about landscapes or journeys, no musing. Say the real thing simply. "
     "Write clean, well-formed sentences with normal capitalisation and a space after every comma "
     "and period; this text is read aloud, so malformed punctuation is audible. "
-    "Never use markdown, bullet points, asterisks, or code blocks. No stage directions or emojis. "
+    "Never use markdown of any kind — no asterisks, underscores, bullet points, or code blocks. "
+    "Book and film titles are spoken plainly with no punctuation around them. "
+    "No stage directions or emojis. "
     "Speak as plain conversational text for TTS. Match the person's pace and energy. "
     "If they start speaking while you are talking, stop immediately and listen. "
     #
@@ -448,7 +494,7 @@ async def entrypoint(ctx):
 
     await session.start(
         room=ctx.room,
-        agent=Agent(instructions=VOICE_AGENT_INSTRUCTIONS, tools=[search_web]),
+        agent=VoiceAgent(instructions=VOICE_AGENT_INSTRUCTIONS, tools=[search_web]),
         room_options=room_options,
     )
 
