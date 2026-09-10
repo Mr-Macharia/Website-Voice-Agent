@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { AccessToken } from 'livekit-server-sdk'
+import { AccessToken, type RoomConfiguration } from 'livekit-server-sdk'
 
 export async function GET(req: NextRequest) {
   return handleToken(req)
@@ -29,19 +29,46 @@ async function handleToken(req: NextRequest) {
       }
     }
 
-    const apiKey = process.env.LIVEKIT_API_KEY || 'devkey'
-    const apiSecret =
-      process.env.LIVEKIT_API_SECRET || 'secret01234567890123456789012345678901'
+    const apiKey = process.env.LIVEKIT_API_KEY
+    const apiSecret = process.env.LIVEKIT_API_SECRET
     const wsUrl =
-      process.env.NEXT_PUBLIC_LIVEKIT_URL ||
-      process.env.LIVEKIT_URL ||
-      'wss://voice-agent.livekit.cloud'
+      process.env.NEXT_PUBLIC_LIVEKIT_URL || process.env.LIVEKIT_URL
+
+    // Previously these silently defaulted to devkey/secret, which produced a
+    // confusing "invalid API key" in the browser when signing against a real
+    // LiveKit Cloud project. Fail loudly instead.
+    if (!apiKey || !apiSecret || !wsUrl) {
+      const missing = [
+        !apiKey && 'LIVEKIT_API_KEY',
+        !apiSecret && 'LIVEKIT_API_SECRET',
+        !wsUrl && 'NEXT_PUBLIC_LIVEKIT_URL (or LIVEKIT_URL)'
+      ].filter(Boolean)
+
+      console.error(
+        `[LiveKit token] Missing config: ${missing.join(', ')}. ` +
+          'Set these in the repo-root .env (loaded by next.config.ts).'
+      )
+      return NextResponse.json(
+        { error: `LiveKit is not configured. Missing: ${missing.join(', ')}` },
+        { status: 500 }
+      )
+    }
+
+    // The worker registers with agent_name="voice-agent", which makes it an
+    // explicit-dispatch agent: it will NOT auto-join rooms. Embedding the
+    // dispatch in the token tells LiveKit to bring the agent into this room
+    // as soon as the user connects.
+    const agentName = process.env.LIVEKIT_AGENT_NAME || 'voice-agent'
 
     const at = new AccessToken(apiKey, apiSecret, {
       identity,
       name,
       ttl: '1h'
     })
+
+    at.roomConfig = {
+      agents: [{ agentName }]
+    } as RoomConfiguration
 
     at.addGrant({
       roomJoin: true,

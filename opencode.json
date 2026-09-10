@@ -3,10 +3,7 @@
   "mcp": {
     "deepgram": {
       "type": "local",
-      "command": ["dg", "mcp"],
-      "environment": {
-        "DEEPGRAM_API_KEY": "{env:DEEPGRAM_API_KEY}"
-      },
+      "command": ["/home/gich/.local/bin/dg-mcp-stdio.sh"],
       "enabled": true
     },
     "agno-docs": {

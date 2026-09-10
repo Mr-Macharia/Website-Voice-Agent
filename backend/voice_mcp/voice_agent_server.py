@@ -268,15 +268,37 @@ async def deepgram_speak(
     if not text or not text.strip():
         return "Error: empty text"
 
-    # Try SDK first
+    out = Path(output_path)
+    if not out.is_absolute():
+        out = Path(__file__).parent.parent / output_path
+    out.parent.mkdir(parents=True, exist_ok=True)
+
+    is_flux = model.lower().startswith("flux")
+
+    # Flux models require the v2 speak endpoint (v1 returns
+    # V2_MODEL_ON_V1_SPEAK_ENDPOINT). Aura models use v1.
+    if is_flux:
+        import httpx
+
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                res = await client.post(
+                    f"https://api.deepgram.com/v2/speak?model={model}&encoding=mp3",
+                    headers={"Authorization": f"Token {api_key}", "Content-Type": "application/json"},
+                    json={"text": text},
+                )
+                if res.status_code != 200:
+                    return f"Deepgram TTS error {res.status_code}: {res.text[:500]}"
+                out.write_bytes(res.content)
+                return f"Saved {len(res.content)} bytes to {out} (model={model})"
+        except Exception as e:
+            return f"Error: {e}"
+
+    # Try SDK first (Aura / v1 models)
     try:
         from deepgram import DeepgramClient
 
         dg = DeepgramClient(api_key=api_key)
-        out = Path(output_path)
-        if not out.is_absolute():
-            out = Path(__file__).parent.parent / output_path
-        out.parent.mkdir(parents=True, exist_ok=True)
         # SDK v7: deepgram.speak.v1.audio.generate streaming
         try:
             # new streaming API
@@ -287,7 +309,7 @@ async def deepgram_speak(
             size = out.stat().st_size
             return f"Saved {size} bytes to {out} (model={model})"
         except Exception:
-            # fallback: REST save
+            # fallback: REST save (v1 endpoint for non-Flux models)
             import httpx
 
             async with httpx.AsyncClient(timeout=30.0) as client:

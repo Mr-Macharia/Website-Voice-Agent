@@ -6,7 +6,8 @@ import {
   RoomAudioRenderer,
   useVoiceAssistant,
   useLocalParticipant,
-  useRoomContext
+  useRoomContext,
+  useTranscriptions
 } from '@livekit/components-react'
 import { Track } from 'livekit-client'
 import {
@@ -56,6 +57,107 @@ const LiveKitVoiceSession: React.FC<{
   const { localParticipant } = useLocalParticipant()
   const voiceAssistant = useVoiceAssistant()
   const [isMuted, setIsMuted] = useState(false)
+  const { setMessages } = useStore()
+
+  // Live transcript of both sides. The worker already publishes transcriptions
+  // to the room (its TranscriptSynchronizer -> RoomIO pipeline), so this only
+  // needs to render them.
+  const transcriptions = useTranscriptions()
+  const transcriptEndRef = useRef<HTMLDivElement | null>(null)
+
+  const agentIdentity = voiceAssistant?.agent?.identity
+  const localIdentity = localParticipant?.identity
+
+  // One entry per text stream: later chunks of the same stream replace earlier
+  // ones, so partial utterances update in place instead of stacking up.
+  const turns = React.useMemo(() => {
+    const byStream = new Map<
+      string,
+      { id: string; role: 'user' | 'agent'; text: string; final: boolean }
+    >()
+
+    for (const t of transcriptions) {
+      const id = t.streamInfo?.id ?? `${t.participantInfo?.identity}-${t.text}`
+      const identity = t.participantInfo?.identity
+      const role: 'user' | 'agent' =
+        identity && localIdentity && identity === localIdentity
+          ? 'user'
+          : identity && agentIdentity && identity === agentIdentity
+            ? 'agent'
+            : identity === localIdentity
+              ? 'user'
+              : 'agent'
+
+      byStream.set(id, {
+        id,
+        role,
+        text: t.text,
+        final: t.streamInfo?.attributes?.['lk.transcription_final'] === 'true'
+      })
+    }
+
+    return Array.from(byStream.values()).filter((t) => t.text.trim().length > 0)
+  }, [transcriptions, localIdentity, agentIdentity])
+
+  useEffect(() => {
+    transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [turns])
+
+  // Mirror finalized turns into the main chat panel, so a voice session leaves
+  // behind a readable conversation the same way the legacy bridge did.
+  // Keyed by stream id: each turn is written once, when it goes final.
+  const syncedTextRef = useRef<Map<string, string>>(new Map())
+
+  useEffect(() => {
+    // Write a turn once it is final. Not every transcript carries the
+    // `lk.transcription_final` attribute, so also treat a turn as settled once
+    // a LATER stream has started — otherwise a missing attribute would mean
+    // nothing ever reaches the chat panel.
+    const lastId = turns.length > 0 ? turns[turns.length - 1].id : null
+
+    const pending = turns.filter((t) => {
+      if (t.text.trim().length === 0) return false
+      const settled = t.final || t.id !== lastId
+      if (!settled) return false
+      // Re-emit if a stream's final text differs from what we already wrote.
+      return syncedTextRef.current.get(t.id) !== t.text
+    })
+    if (pending.length === 0) return
+
+    const isUpdate = pending.some((t) => syncedTextRef.current.has(t.id))
+    for (const t of pending) syncedTextRef.current.set(t.id, t.text)
+
+    // A corrected turn replaces its earlier text rather than duplicating it.
+    if (isUpdate) {
+      setMessages((prev) => {
+        const next = [...prev]
+        for (const t of pending) {
+          const idx = next.findIndex(
+            (m) => m.content === syncedTextRef.current.get(t.id)
+          )
+          if (idx === -1) {
+            next.push({
+              role: t.role === 'user' ? ('user' as const) : ('agent' as const),
+              content: t.text,
+              created_at: Date.now()
+            })
+          }
+        }
+        return next
+      })
+      return
+    }
+
+    const now = Date.now()
+    setMessages((prev) => [
+      ...prev,
+      ...pending.map((t, i) => ({
+        role: t.role === 'user' ? ('user' as const) : ('agent' as const),
+        content: t.text,
+        created_at: now + i
+      }))
+    ])
+  }, [turns, setMessages])
 
   const getAgentState = (): VoiceState => {
     if (!voiceAssistant) return 'idle'
@@ -141,15 +243,42 @@ const LiveKitVoiceSession: React.FC<{
           />
         </div>
 
-        {/* 2. Message / Status Feed */}
-        <div className="relative z-10 my-auto flex w-full max-w-xl flex-1 items-center justify-center px-4 py-2 text-center">
-          <div className="rounded-2xl border border-white/5 bg-[#0f172a]/70 px-6 py-3.5 font-mono text-xs text-zinc-300 shadow-xl backdrop-blur-xl">
-            {agentState === 'speaking'
-              ? `${agentName} is responding...`
-              : agentState === 'thinking'
-                ? 'LiveKit Agent processing...'
-                : 'Speak naturally into your microphone...'}
-          </div>
+        {/* 2. Live Transcript */}
+        <div className="relative z-10 my-auto flex w-full max-w-xl flex-1 flex-col overflow-hidden px-2 py-2">
+          {turns.length === 0 ? (
+            <div className="flex flex-1 items-center justify-center text-center">
+              <div className="rounded-2xl border border-white/5 bg-[#0f172a]/70 px-6 py-3.5 font-mono text-xs text-zinc-300 shadow-xl backdrop-blur-xl">
+                {agentState === 'speaking'
+                  ? `${agentName} is responding...`
+                  : agentState === 'thinking'
+                    ? 'LiveKit Agent processing...'
+                    : 'Speak naturally into your microphone...'}
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-1 flex-col gap-2.5 overflow-y-auto px-2 py-1">
+              {turns.map((turn) => (
+                <div
+                  key={turn.id}
+                  className={`flex ${turn.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
+                  <div
+                    className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm leading-relaxed shadow-lg backdrop-blur-xl ${
+                      turn.role === 'user'
+                        ? 'border border-sky-500/20 bg-sky-500/10 text-sky-50'
+                        : 'border border-white/10 bg-[#0f172a]/80 text-zinc-100'
+                    } ${turn.final ? '' : 'opacity-70'}`}
+                  >
+                    <span className="mb-0.5 block font-mono text-[10px] uppercase tracking-wide text-zinc-400">
+                      {turn.role === 'user' ? 'You' : agentName}
+                    </span>
+                    {turn.text}
+                  </div>
+                </div>
+              ))}
+              <div ref={transcriptEndRef} />
+            </div>
+          )}
         </div>
 
         {/* 3. Spacer bottom */}
@@ -217,6 +346,7 @@ const DirectVoiceSession: React.FC<{
   const vadHistoryRef = useRef<boolean[]>([])
   const turnIdRef = useRef(0)
   const turnActiveRef = useRef(false)
+  const turnWatchdogRef = useRef<NodeJS.Timeout | null>(null)
   const lastVadLogRef = useRef(0)
   const sourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null)
   const analyserNodeRef = useRef<AnalyserNode | null>(null)
@@ -250,6 +380,58 @@ const DirectVoiceSession: React.FC<{
         } catch {}
       }
       sessionIdRef.current = sid
+    }
+  }, [])
+  // Cross-tab single-session lock: two open voice tabs each capture the mic
+  // and play TTS ("two voices"). Web Lock auto-releases when the holder tab
+  // closes; no heartbeat needed. Falls back to single-session on browsers
+  // without the Locks API.
+  const [tabLock, setTabLock] = useState<'checking' | 'held' | 'busy'>('checking')
+  useEffect(() => {
+    let cancelled = false
+    let release: (() => void) | null = null
+    const acquire = async () => {
+      try {
+        if (
+          typeof navigator !== 'undefined' &&
+          'locks' in navigator &&
+          navigator.locks?.request
+        ) {
+          // The request promise settles only once the callback's promise does,
+          // and ours is deliberately held open for the tab's lifetime to keep
+          // the lock. So awaiting it would hang forever in the granted case.
+          // Mark the lock held from *inside* the callback (the moment it is
+          // granted); the outer promise then only reports the not-granted case,
+          // where the callback never runs and it resolves to undefined.
+          let acquired = false
+          const res = navigator.locks.request(
+            'voice-agent-session',
+            { ifAvailable: true },
+            () =>
+              new Promise<true>((resolve) => {
+                acquired = true
+                if (cancelled) {
+                  resolve(true)
+                  return
+                }
+                release = () => resolve(true)
+                setTabLock('held')
+              })
+          )
+          void res.then(() => {
+            if (!acquired && !cancelled) setTabLock('busy')
+          })
+        } else if (!cancelled) {
+          setTabLock('held')
+        }
+      } catch {
+        if (!cancelled) setTabLock('held')
+      }
+    }
+    void acquire()
+    return () => {
+      cancelled = true
+      release?.()
     }
   }, [])
 
@@ -402,6 +584,23 @@ const DirectVoiceSession: React.FC<{
     isRecordingAudioRef.current = true
     speechStartTimeRef.current = Date.now()
   }
+  const clearTurnWatchdog = () => {
+    if (turnWatchdogRef.current) {
+      clearTimeout(turnWatchdogRef.current)
+      turnWatchdogRef.current = null
+    }
+  }
+  const armTurnWatchdog = () => {
+    clearTurnWatchdog()
+    turnWatchdogRef.current = setTimeout(() => {
+      if (turnActiveRef.current) {
+        turnActiveRef.current = false
+        setVoiceState('listening')
+        setStatusMessage('Response timed out — try again')
+        toast.error('Voice response timed out — please try again')
+      }
+    }, 25000)
+  }
 
   const stopAudioRecordingAndSend = () => {
     if (!isRecordingAudioRef.current && sampleBufferRef.current.length === 0)
@@ -462,6 +661,7 @@ const DirectVoiceSession: React.FC<{
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       turnIdRef.current += 1
       turnActiveRef.current = true
+      armTurnWatchdog()
       setVoiceState('thinking')
       setStatusMessage('Processing speech (Deepgram Flux)...')
       setAgentText('')
@@ -474,6 +674,7 @@ const DirectVoiceSession: React.FC<{
         wsRef.current.send(wavBuffer)
       } catch (err) {
         console.error('Failed to send WAV buffer:', err)
+        clearTurnWatchdog()
         setVoiceState('listening')
         turnActiveRef.current = false
       }
@@ -486,6 +687,12 @@ const DirectVoiceSession: React.FC<{
 
   // Setup WebSocket and Audio
   useEffect(() => {
+    if (tabLock === 'checking') return
+    if (tabLock === 'busy') {
+      setVoiceState('error')
+      setStatusMessage('Voice already active in another tab — close it there first.')
+      return
+    }
     let isMounted = true
 
     try {
@@ -589,6 +796,7 @@ const DirectVoiceSession: React.FC<{
 
             lastTurnCompleteRef.current = true
             turnActiveRef.current = false
+            clearTurnWatchdog()
             const completedTurnId = turnIdRef.current
             // Wait for jitter buffer to drain: poll until empty, but ignore if new turn started
             const checkDone = () => {
@@ -609,9 +817,14 @@ const DirectVoiceSession: React.FC<{
             setTimeout(checkDone, 180)
           } else if (parsed.type === 'no_speech') {
             turnActiveRef.current = false
+            clearTurnWatchdog()
             setVoiceState('listening')
           } else if (parsed.type === 'error') {
             toast.error(parsed.message || 'Voice Turn Error')
+            // Backend sends error+turn_complete for fatal turns, but timeout
+            // errors arrive with turn_complete separately — only force-reset
+            // here when no turn is left to complete it.
+            if (!turnActiveRef.current) clearTurnWatchdog()
           }
         } catch {}
       } else if (data instanceof ArrayBuffer && audioCtxRef.current) {
@@ -873,6 +1086,11 @@ const DirectVoiceSession: React.FC<{
       isMounted = false
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current)
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current)
+      try {
+        ws.close()
+      } catch {}
+      clearTimeout(turnWatchdogRef.current ?? undefined)
+      turnWatchdogRef.current = null
       if (ws.readyState === WebSocket.OPEN) ws.close()
       if (mediaStreamRef.current) {
         mediaStreamRef.current.getTracks().forEach((t) => t.stop())
@@ -928,7 +1146,7 @@ const DirectVoiceSession: React.FC<{
       resumePromiseRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedEndpoint, agentName, setMessages])
+  }, [selectedEndpoint, agentName, setMessages, tabLock])
 
   // Seamless Jitter-Free PCM Audio Playback — Brave-tuned 120ms buffer + serialized resume
   const playPcmChunk = async (arrayBuffer: ArrayBuffer) => {
@@ -1038,6 +1256,7 @@ const DirectVoiceSession: React.FC<{
     stopAudioPlayback()
     turnIdRef.current += 1
     turnActiveRef.current = true
+    armTurnWatchdog()
     isFirstChunkRef.current = true
     lastTurnCompleteRef.current = false
     setUserTranscript(text.trim())
@@ -1403,21 +1622,33 @@ export const LiveKitVoiceModal: React.FC<LiveKitVoiceModalProps> = ({
 
         if (res.ok) {
           const data = await res.json()
-          if (
-            data.token &&
-            data.url &&
-            !data.url.includes('placeholder') &&
-            process.env.NEXT_PUBLIC_LIVEKIT_URL
-          ) {
+          // LiveKit is the preferred path: it owns turn detection and
+          // interruption handling. Only fall back when the project is
+          // genuinely unconfigured (placeholder URL from .env.example).
+          const url: string = data?.url || ''
+          const isConfigured =
+            !!data?.token &&
+            !!url &&
+            url.startsWith('wss://') &&
+            !url.includes('placeholder') &&
+            !url.includes('your-project')
+
+          if (isConfigured) {
             setToken(data.token)
-            setWsUrl(data.url)
+            setWsUrl(url)
             setUseFallbackMode(false)
             setIsLoading(false)
             return
           }
+
+          console.warn(
+            `[Voice] LiveKit not configured (url="${url}") — using the legacy ` +
+              'WebSocket bridge, which has no semantic turn detection. Set ' +
+              'NEXT_PUBLIC_LIVEKIT_URL / LIVEKIT_API_KEY / LIVEKIT_API_SECRET.'
+          )
         }
 
-        // Default to direct streaming bridge if LiveKit Cloud URL isn't configured in env
+        // Default to direct streaming bridge if LiveKit isn't configured
         setUseFallbackMode(true)
       } catch (err) {
         console.warn('LiveKit token fetch using voice bridge:', err)
@@ -1459,8 +1690,11 @@ export const LiveKitVoiceModal: React.FC<LiveKitVoiceModalProps> = ({
             connect={true}
             audio={true}
             video={false}
-            onError={() => {
-              toast.info('Switching to Direct Streaming Voice Bridge')
+            onError={(err) => {
+              console.error('[Voice] LiveKit room error:', err)
+              toast.error(
+                `LiveKit connection failed (${err?.message || 'unknown'}) — falling back to the legacy bridge`
+              )
               setUseFallbackMode(true)
             }}
             onDisconnected={onClose}

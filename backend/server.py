@@ -287,7 +287,7 @@ def _is_dg_open(ws) -> bool:
 
 
 async def transcribe_audio_bytes(audio_bytes: bytes, content_type: str = "audio/wav") -> str:
-    """Helper to transcribe raw audio bytes using Deepgram Flux-General (48k) with Nova-3 fallback."""
+    """Helper to transcribe raw audio bytes using Deepgram Nova-3 (flux-general-en 400s on this account)."""
     if not DEEPGRAM_API_KEY:
         raise ValueError("DEEPGRAM_API_KEY is not configured")
     
@@ -304,26 +304,14 @@ async def transcribe_audio_bytes(audio_bytes: bytes, content_type: str = "audio/
         clean_content_type = content_type.split(";")[0].strip() or "audio/wav"
     
     async with httpx.AsyncClient(timeout=30.0) as client:
-        # Primary: flux-general-en (matches Settings.listen, 48k input) — best for conversational VAD
         dg_res = await client.post(
-            "https://api.deepgram.com/v1/listen?model=flux-general-en&smart_format=true&language=en-US",
+            "https://api.deepgram.com/v1/listen?model=nova-3&smart_format=true&language=en-US",
             headers={
                 "Authorization": f"Token {DEEPGRAM_API_KEY}",
                 "Content-Type": clean_content_type
             },
             content=audio_bytes
         )
-        # Fallback to nova-3 if flux model unavailable on account/region
-        if dg_res.status_code != 200 and "flux" in dg_res.text.lower():
-            print(f"[STT] flux-general-en failed ({dg_res.status_code}), falling back to nova-3")
-            dg_res = await client.post(
-                "https://api.deepgram.com/v1/listen?model=nova-3&smart_format=true",
-                headers={
-                    "Authorization": f"Token {DEEPGRAM_API_KEY}",
-                    "Content-Type": clean_content_type
-                },
-                content=audio_bytes
-            )
         
         if dg_res.status_code != 200:
             print(f"Deepgram STT error ({clean_content_type}): {dg_res.status_code} {dg_res.text}")
@@ -356,10 +344,14 @@ async def speech_to_text(request: Request):
 # Agno think (no Deepgram think) — Deepgram is pure STT/TTS, AgentOS is the LLM.
 # Borrowed pattern from Deepgram FastAPI example: persistent DG TTS WS + coalesced Speak + jitter-aware relay.
 # ---------------------------------------------------------------------------
+VOICE_CLIENTS_ACTIVE = 0
+
 @base_app.websocket("/ws/voice")
 async def voice_websocket(client_ws: WebSocket):
     await client_ws.accept()
-    print("Voice WebSocket client connected")
+    global VOICE_CLIENTS_ACTIVE
+    VOICE_CLIENTS_ACTIVE += 1
+    print(f"Voice WebSocket client connected (active: {VOICE_CLIENTS_ACTIVE})")
 
     dg_url = "wss://api.deepgram.com/v2/speak?model=flux-brooke-en&encoding=linear16&sample_rate=24000"
     dg_headers = {"Authorization": f"Token {DEEPGRAM_API_KEY}"}
@@ -376,10 +368,12 @@ async def voice_websocket(client_ws: WebSocket):
 
     # Turn task handling with interrupt concurrency — allows barge-in while TTS is streaming
     turn_task: Optional[asyncio.Task] = None
+    last_agent_text = ""  # full text of this connection's most recent reply (echo detection)
 
     async def handle_turn(user_message: str, session_id: Optional[str]):
         # Ensure Deepgram TTS WebSocket is connected (robust helper)
-        nonlocal dg_ws
+        nonlocal dg_ws, last_agent_text
+        reply_parts: list = []
         if not _is_dg_open(dg_ws):
             try:
                 dg_ws = await websockets.connect(dg_url, additional_headers=dg_headers)
@@ -422,6 +416,7 @@ async def voice_websocket(client_ws: WebSocket):
                         content = getattr(chunk, "content", None)
                         if content:
                             await client_ws.send_json({"type": "agent_text", "text": content})
+                            reply_parts.append(content)
                             speak_buffer += content
                             now = asyncio.get_event_loop().time()
                             should_flush = (
@@ -457,7 +452,15 @@ async def voice_websocket(client_ws: WebSocket):
             async def stream_deepgram_to_client():
                 try:
                     while True:
-                        msg = await dg_ws.recv()
+                        try:
+                            msg = await asyncio.wait_for(dg_ws.recv(), timeout=10.0)
+                        except asyncio.TimeoutError:
+                            print("[WS Voice] TTS recv timeout — ending turn to avoid stuck thinking")
+                            try:
+                                await client_ws.send_json({"type": "turn_complete"})
+                            except Exception:
+                                pass
+                            break
                         if isinstance(msg, bytes):
                             if len(msg) < 960:
                                 continue
@@ -465,9 +468,40 @@ async def voice_websocket(client_ws: WebSocket):
                         elif isinstance(msg, str):
                             parsed = json.loads(msg)
                             event_type = parsed.get("type")
-                            if event_type in ("SpeechMetadata", "Flushed"):
-                                if event_type == "Flushed":
-                                    continue
+                            if event_type == "Flushed":
+                                try:
+                                    deadline = asyncio.get_event_loop().time() + 1.5
+                                    while True:
+                                        remaining = deadline - asyncio.get_event_loop().time()
+                                        if remaining <= 0:
+                                            break
+                                        try:
+                                            trailing = await asyncio.wait_for(dg_ws.recv(), timeout=remaining)
+                                        except asyncio.TimeoutError:
+                                            break
+                                        if isinstance(trailing, bytes):
+                                            if len(trailing) < 960:
+                                                continue
+                                            await client_ws.send_bytes(trailing)
+                                        elif isinstance(trailing, str):
+                                            try:
+                                                t_parsed = json.loads(trailing)
+                                            except Exception:
+                                                continue
+                                            t_type = t_parsed.get("type")
+                                            if t_type == "SpeechMetadata":
+                                                break
+                                            elif t_type == "Error":
+                                                print(f"[Deepgram TTS Error Event] {t_parsed}")
+                                                await client_ws.send_json({"type": "error", "message": t_parsed.get("description", str(t_parsed))})
+                                                break
+                                except asyncio.CancelledError:
+                                    raise
+                                except Exception as de:
+                                    print(f"[WS Voice] Flushed drain error: {de}")
+                                await client_ws.send_json({"type": "turn_complete"})
+                                break
+                            elif event_type == "SpeechMetadata":
                                 await client_ws.send_json({"type": "turn_complete"})
                                 break
                             elif event_type == "SpeechInterrupted":
@@ -486,8 +520,21 @@ async def voice_websocket(client_ws: WebSocket):
                     raise
                 except Exception as e:
                     print(f"Error streaming Deepgram to client: {e}")
+                    try:
+                        await client_ws.send_json({"type": "turn_complete"})
+                    except Exception:
+                        pass
 
-            await asyncio.gather(stream_agno_to_deepgram(), stream_deepgram_to_client())
+            try:
+                await asyncio.wait_for(asyncio.gather(stream_agno_to_deepgram(), stream_deepgram_to_client()), timeout=60.0)
+                last_agent_text = "".join(reply_parts)
+            except asyncio.TimeoutError:
+                print("[WS Voice] Turn timeout (60s) — forcing turn_complete")
+                try:
+                    await client_ws.send_json({"type": "error", "message": "Response timed out, please try again"})
+                    await client_ws.send_json({"type": "turn_complete"})
+                except Exception:
+                    pass
         except asyncio.CancelledError:
             print("[WS Voice] Turn cancelled")
             try:
@@ -553,15 +600,21 @@ async def voice_websocket(client_ws: WebSocket):
                 user_message = ""
                 session_id = None
                 is_interrupt = False
+                from_voice = False
 
                 if "bytes" in message and message["bytes"]:
                     raw_bytes = message["bytes"]
-                    user_message = await transcribe_audio_bytes(raw_bytes, "audio/wav")
+                    try:
+                        user_message = await transcribe_audio_bytes(raw_bytes, "audio/wav")
+                    except Exception as e:
+                        print(f"[STT] transcribe failed, recovering turn: {e}")
+                        user_message = ""
                     if not user_message:
                         await client_ws.send_json({"type": "no_speech"})
                         await client_ws.send_json({"type": "turn_complete"})
                         continue
                     await client_ws.send_json({"type": "user_transcript", "text": user_message})
+                    from_voice = True
                 elif "text" in message and message["text"]:
                     raw_text = message["text"]
                     try:
@@ -571,13 +624,18 @@ async def voice_websocket(client_ws: WebSocket):
                         if msg_type == "audio" and "audio" in data:
                             import base64
                             mime = data.get("mime_type", "audio/webm")
-                            audio_bytes = base64.b64decode(data["audio"])
-                            user_message = await transcribe_audio_bytes(audio_bytes, mime)
+                            try:
+                                audio_bytes = base64.b64decode(data["audio"])
+                                user_message = await transcribe_audio_bytes(audio_bytes, mime)
+                            except Exception as e:
+                                print(f"[STT] transcribe failed, recovering turn: {e}")
+                                user_message = ""
                             if not user_message:
                                 await client_ws.send_json({"type": "no_speech"})
                                 await client_ws.send_json({"type": "turn_complete"})
                                 continue
                             await client_ws.send_json({"type": "user_transcript", "text": user_message})
+                            from_voice = True
                         elif msg_type in ("ping", "keepalive", "keepAlive"):
                             await client_ws.send_json({"type": "pong"})
                             continue
@@ -616,6 +674,15 @@ async def voice_websocket(client_ws: WebSocket):
                 if not user_message or not user_message.strip():
                     continue
 
+                if from_voice and last_agent_text:
+                    norm_msg = " ".join(user_message.lower().split())
+                    norm_reply = " ".join(last_agent_text.lower().split())
+                    if len(norm_msg) >= 8 and (norm_msg in norm_reply or norm_reply in norm_msg):
+                        print(f"[WS Voice] Dropping self-echo turn: \"{user_message}\"")
+                        await client_ws.send_json({"type": "no_speech"})
+                        await client_ws.send_json({"type": "turn_complete"})
+                        continue
+
                 print(f"\nUser [Voice Turn]: {user_message}")
 
                 if not DEEPGRAM_API_KEY:
@@ -638,7 +705,6 @@ async def voice_websocket(client_ws: WebSocket):
                             await dg_ws.send(json.dumps({"type": "Interrupt"}))
                         except Exception:
                             pass
-
                 turn_task = asyncio.create_task(handle_turn(user_message, session_id))
 
             if turn_task and turn_task in done:
@@ -655,6 +721,8 @@ async def voice_websocket(client_ws: WebSocket):
     except Exception as e:
         print(f"Voice WebSocket error: {e}")
     finally:
+        VOICE_CLIENTS_ACTIVE = max(0, VOICE_CLIENTS_ACTIVE - 1)
+        print(f"Voice WebSocket client disconnected (active: {VOICE_CLIENTS_ACTIVE})")
         if 'recv_task' in locals() and recv_task and not recv_task.done():
             recv_task.cancel()
             try:

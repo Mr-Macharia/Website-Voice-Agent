@@ -19,4 +19,5 @@ dependencies = [
     "ddgs>=9.0.0",
     "mcp[cli]==1.26.0",
     "fastmcp>=2.14.1",
+    "livekit-plugins-noise-cancellation>=0.3.0",
 ]

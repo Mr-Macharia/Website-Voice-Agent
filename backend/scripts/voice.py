@@ -47,19 +47,35 @@ async def run_voice_turn(user_transcript: str):
             print(token, end="", flush=True)
             agent_full_text += token
 
-    # 3. Generate Deepgram TTS (Flux Voice) using SDK v7
-    # flux-brooke-en is the unified streaming voice; batch REST uses v1/speak, streaming uses v2
-    # Deepgram SDK maps flux via v1 audio.generate with flux model — fallback to REST if streaming unavailable
-    audio_stream = deepgram.speak.v1.audio.generate(
-        text=agent_full_text,
-        model="flux-brooke-en"
-    )
-    
-    # Save audio response to file
+    # 3. Generate Deepgram TTS.
+    # Flux models require the v2 speak endpoint (v1 returns
+    # V2_MODEL_ON_V1_SPEAK_ENDPOINT); Aura models use SDK v1.
+    TTS_MODEL = os.getenv("TTS_MODEL", "flux-brooke-en")
     out_file = BACKEND_DIR / "agent_response.mp3"
-    with open(out_file, "wb") as f:
-        for chunk in audio_stream:
-            f.write(chunk)
+    if TTS_MODEL.lower().startswith("flux"):
+        import httpx
+
+        with httpx.Client(timeout=30.0) as client:
+            res = client.post(
+                f"https://api.deepgram.com/v2/speak?model={TTS_MODEL}&encoding=mp3",
+                headers={
+                    "Authorization": f"Token {os.getenv('DEEPGRAM_API_KEY')}",
+                    "Content-Type": "application/json",
+                },
+                json={"text": agent_full_text},
+            )
+            res.raise_for_status()
+            out_file.write_bytes(res.content)
+    else:
+        audio_stream = deepgram.speak.v1.audio.generate(
+            text=agent_full_text,
+            model=TTS_MODEL
+        )
+
+        # Save audio response to file
+        with open(out_file, "wb") as f:
+            for chunk in audio_stream:
+                f.write(chunk)
             
     print(f"\n[Audio saved to {out_file}]")
 
