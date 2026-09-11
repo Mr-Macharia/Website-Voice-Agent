@@ -16,26 +16,26 @@ const TECH_BADGES = [
   { name: 'Next.js & Web Audio', highlight: false }
 ]
 
+// The agent speaks about Gichogu in the third person — it's his assistant, not
+// him — so these are phrased the way a visitor would actually ask.
 const PROMPT_SUGGESTIONS = [
   {
-    icon: AudioWaveform,
-    title: 'Realtime Voice Agent',
-    desc: 'Launch a voice conversation with ultra-low latency Deepgram Flux TTS.',
-    prompt:
-      'Tell me about how your realtime voice bridge works with Deepgram Flux and Agno.'
-  },
-  {
     icon: Cpu,
-    title: 'AI Systems & Architecture',
-    desc: 'Ask about full-stack ML pipelines, streaming APIs, and agentic workflows.',
-    prompt:
-      'Explain the architecture for building low-latency conversational voice assistants.'
+    title: 'What he builds',
+    desc: 'Projects, the stack he works in, and what he is focused on now.',
+    prompt: 'What does Gichogu build, and what is he working on at the moment?'
   },
   {
     icon: Terminal,
-    title: 'Code & Tool Execution',
-    desc: 'Run research queries, duckduckgo web search, and data processing.',
-    prompt: 'Search the web for the latest breakthroughs in AI voice synthesis.'
+    title: 'Experience',
+    desc: 'Where he has worked, what he has shipped, and what he is good at.',
+    prompt: "What's Gichogu's background and experience with AI systems?"
+  },
+  {
+    icon: AudioWaveform,
+    title: 'Get in touch',
+    desc: 'Check his availability and book a time, or leave your details.',
+    prompt: 'Is Gichogu available for work? I would like to book a chat.'
   }
 ]
 

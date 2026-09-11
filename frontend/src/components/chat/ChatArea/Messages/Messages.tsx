@@ -149,10 +149,25 @@ const Reasonings: FC<ReasoningProps> = ({ reasoning }) => (
   </div>
 )
 
+// Raw tool names ("SEARCH_ABOUT_OWNER") leak implementation detail to visitors.
+// Anything unmapped falls back to a humanised version of the name.
+const TOOL_LABELS: Record<string, string> = {
+  search_about_owner: 'Checking what I know',
+  search_web: 'Searching the web',
+  get_available_slots: 'Checking availability',
+  book_meeting: 'Booking the meeting',
+  capture_lead: 'Saving your details'
+}
+
+const toolLabel = (name?: string) => {
+  if (!name) return 'Working'
+  return TOOL_LABELS[name] ?? name.replace(/_/g, ' ')
+}
+
 const ToolComponent = memo(({ tools }: ToolCallProps) => (
   <div className="inline-flex items-center gap-1.5 rounded-xl border border-[#e85d04]/30 bg-[#0f172a]/90 px-3 py-1 font-mono text-xs text-orange-200 shadow-sm">
     <span className="size-1.5 animate-pulse rounded-full bg-[#f48c06]" />
-    <span className="uppercase">{tools.tool_name}</span>
+    <span>{toolLabel(tools.tool_name)}</span>
   </div>
 ))
 ToolComponent.displayName = 'ToolComponent'
