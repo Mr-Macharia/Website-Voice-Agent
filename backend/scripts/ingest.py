@@ -312,6 +312,16 @@ def main() -> int:
         logger.info("\n%s:", name)
         total += SOURCES[name](kb, force=args.force or args.reindex)
 
+    # Agno creates the HNSW/GIN indexes only when asked. Without this the
+    # table has B-tree indexes and every search is a sequential scan.
+    if total:
+        logger.info("\nBuilding vector indexes…")
+        try:
+            db.create_vector_indexes()
+            logger.info("  indexes ready")
+        except Exception as e:
+            logger.warning("  could not build indexes: %s", e)
+
     logger.info("\nIngested %d item(s).", total)
     if total == 0:
         logger.warning(

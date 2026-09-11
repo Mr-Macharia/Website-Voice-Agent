@@ -94,9 +94,22 @@ def get_agno_db() -> Any:
 def get_embedder() -> Any:
     """DeepInfra embeddings through the OpenAI-compatible client.
 
-    dimensions MUST be passed: OpenAIEmbedder defaults to 1536 based on OpenAI
-    model names, which is wrong for BGE (768) and would create a mis-sized
-    pgvector column that silently corrupts retrieval.
+    Two constraints pull in opposite directions:
+
+    - OpenAIEmbedder.dimensions defaults to 1536 (an OpenAI model size). Agno
+      reads it to size the pgvector column, so it must be correct for BGE (768)
+      or every insert fails.
+    - But Agno also SENDS dimensions whenever base_url is set, and DeepInfra
+      rejects it for BGE — the model has no matryoshka representation, so the
+      output size cannot be truncated. The request returns HTTP 400 and no
+      embedding at all.
+
+    So the attribute is set (for the column) while the request parameter is
+    suppressed. Agno applies request_params last, so an explicit None there
+    wins over the value it inserted; the OpenAI client then drops the key.
+
+    EMBED_DIMENSIONS must therefore match the model's NATIVE size, not a size
+    we are choosing — 768 for bge-base-en-v1.5, verified against the endpoint.
     """
     from agno.knowledge.embedder.openai import OpenAIEmbedder
 
@@ -105,6 +118,7 @@ def get_embedder() -> Any:
         base_url=config.DEEPINFRA_BASE_URL,
         api_key=config.DEEPINFRA_API_KEY,
         dimensions=config.EMBED_DIMENSIONS,
+        request_params={"dimensions": None},
     )
 
 
@@ -134,8 +148,39 @@ def get_vector_db(table_name: str = "knowledge_vectors") -> Any:
         embedder=get_embedder(),
         search_type=SearchType.hybrid,
         distance=Distance.cosine,
-        vector_index=HNSW(m=16, ef_search=20, ef_construction=200),
+        # configuration={} deliberately: Agno emits `SET key = :value` with a
+        # bind parameter, which Postgres rejects for SET statements, so its
+        # default maintenance_work_mem entry breaks index creation outright.
+        vector_index=HNSW(m=16, ef_search=20, ef_construction=200, configuration={}),
         # Weight vector vs keyword in the hybrid fusion. 0.6 leans on semantics
         # while leaving keyword matching enough influence to win on exact names.
         vector_score_weight=0.6,
     )
+
+
+def create_vector_indexes(table_name: str = "knowledge_vectors", schema: str = "ai") -> None:
+    """Create the HNSW and GIN indexes for hybrid search.
+
+    Agno's PgVector.optimize() cannot do this against Postgres: it emits
+    `SET maintenance_work_mem = :value` and `WITH (m = :m, ...)`, binding
+    parameters into statements where Postgres does not accept them, so both
+    index creations fail. The SQL here is the same thing Agno intends, written
+    so it actually executes.
+
+    Idempotent — safe to run after every ingestion.
+    """
+    from sqlalchemy import text
+
+    full = f"{schema}.{table_name}"
+    statements = [
+        "SET maintenance_work_mem = '512MB'",
+        f'CREATE INDEX IF NOT EXISTS {table_name}_hnsw_index '
+        f"ON {full} USING hnsw (embedding vector_cosine_ops) "
+        f"WITH (m = 16, ef_construction = 200)",
+        f'CREATE INDEX IF NOT EXISTS {table_name}_content_gin_index '
+        f"ON {full} USING gin (to_tsvector('english', content))",
+    ]
+
+    with get_engine().begin() as conn:
+        for stmt in statements:
+            conn.execute(text(stmt))

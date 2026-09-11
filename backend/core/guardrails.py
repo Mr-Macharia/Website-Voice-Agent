@@ -57,6 +57,37 @@ def _host_of(candidate: str) -> str:
     return parsed.netloc.lower().removeprefix("www.")
 
 
+# deepseek leaks fragments of its internal tool-call syntax into message
+# content — "<｜DSML｜function_calls", "<｜tool▁calls▁begin｜>" and similar,
+# using full-width pipes and other unusual separators. Visitors must never see
+# these, and TTS would read them aloud as gibberish.
+_CONTROL_TOKEN_RE = re.compile(
+    "|".join([
+        # Fully delimited: <｜anything｜>
+        r"<\s*[\u2502\u2503\uFF5C|][^>]{0,60}?[\u2502\u2503\uFF5C|]\s*>",
+        # Unclosed opener: "<｜DSML｜function_calls" / "<|tool_calls_begin"
+        # The keyword is matched exactly, with optional ▁/_ separated suffixes
+        # like "_begin" or "▁end" — never a bare following word.
+        r"<\s*[\u2502\u2503\uFF5C|]?[A-Za-z_\u2581]*[\u2502\u2503\uFF5C|]?\s*"
+        r"(?:function|tool)[_\u2581]?calls?"
+        r"(?:[_\u2581](?:begin|end))?",
+        # Bare leaked keyword at the start of a reply.
+        r"^\s*(?:function|tool)[_\u2581]?calls?(?:[_\u2581](?:begin|end))?",
+    ]),
+    re.IGNORECASE,
+)
+
+
+def strip_control_tokens(text: str) -> str:
+    """Remove model-internal tool-call markers that leaked into the reply."""
+    if not text:
+        return text
+    cleaned = _CONTROL_TOKEN_RE.sub("", text)
+    if cleaned != text:
+        logger.warning("Stripped model control token(s) from output")
+    return cleaned.lstrip()
+
+
 def strip_unapproved_urls(text: str) -> str:
     """Remove URLs pointing anywhere the agent has no business sending people.
 
@@ -77,3 +108,8 @@ def strip_unapproved_urls(text: str) -> str:
         return "[link removed]"
 
     return _URL_RE.sub(_replace, text)
+
+
+def clean_output(text: str) -> str:
+    """Everything that must never reach a visitor, in one call."""
+    return strip_unapproved_urls(strip_control_tokens(text))

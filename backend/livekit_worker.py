@@ -245,7 +245,7 @@ async def _sanitize_stream(source, transform):
 
 def _clean_for_speech(text: str) -> str:
     """Strip markdown symbols and any URL the agent was not given by a tool."""
-    return guardrails.strip_unapproved_urls(_strip_markup(text))
+    return guardrails.clean_output(_strip_markup(text))
 
 
 class VoiceAgent(Agent):
@@ -259,7 +259,7 @@ class VoiceAgent(Agent):
         # What the visitor reads in the transcript. Markdown is fine here, but
         # a fabricated link must not reach them in writing either.
         async for chunk in Agent.default.transcription_node(
-            self, _sanitize_stream(text, guardrails.strip_unapproved_urls), model_settings
+            self, _sanitize_stream(text, guardrails.clean_output), model_settings
         ):
             yield chunk
 

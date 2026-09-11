@@ -350,7 +350,7 @@ async def voice_websocket(client_ws: WebSocket):
                     # Strip any URL the agent invented rather than got from a
                     # tool. Applied at flush, where text is already coalesced,
                     # so a URL split across tokens is still matched.
-                    text_to_send = guardrails.strip_unapproved_urls(speak_buffer)
+                    text_to_send = guardrails.clean_output(speak_buffer)
                     if not prev_ends_with_space and text_to_send and not text_to_send[0].isspace() and text_to_send[0] not in ".,!?;:')\"":
                         text_to_send = " " + text_to_send
                     prev_ends_with_space = text_to_send.endswith((" ", "\n", "\t")) if text_to_send else prev_ends_with_space
