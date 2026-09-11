@@ -26,7 +26,6 @@ from livekit.agents import (
     AgentServer,
     AgentSession,
     Agent,
-    function_tool,
     AgentStateChangedEvent,
     UserStateChangedEvent,
     inference,
@@ -34,9 +33,8 @@ from livekit.agents import (
 )
 from livekit.plugins import deepgram, silero
 
-# Keep Agno for reference / future hybrid; not used directly in AgentSession LLM
-# (AgentSession LLM is livekit.plugins.openai.LLM for low-latency streaming)
-from agno.db.sqlite import SqliteDb  # noqa: F401 — kept for parity with server.py
+from core import persona
+from core.adapters import livekit as lk_tools
 
 logger = logging.getLogger("voice-agent-worker")
 logging.basicConfig(level=logging.INFO)
@@ -149,12 +147,9 @@ def _widen_interruption_timeout() -> None:
 
 
 
-DB_PATH = str(BACKEND_DIR / "agno.db")
-db = SqliteDb(
-    db_file=DB_PATH,
-    session_table="agent_sessions",
-    memory_table="user_memories",
-)
+# No database handle here: the LiveKit pipeline drives livekit.plugins.openai.LLM
+# directly and never touched the Agno session store. Session persistence for the
+# text agent lives in core/db.py (Postgres).
 
 # ---------------------------------------------------------------------------
 # LLM selection — mirrors server.py but for LiveKit pipeline
@@ -201,43 +196,10 @@ def _create_llm():
 
 
 # ---------------------------------------------------------------------------
-# Tools — ported from server.py's WebSearchTools so the LiveKit agent can look
-# things up instead of inventing them. Agno Toolkits are not compatible with
-# LiveKit, so this is re-expressed as a LiveKit @function_tool.
+# Tools now live in core/tools/ and are wrapped for LiveKit in
+# core/adapters/livekit.py, so the voice agent, the text agent and the MCP
+# server all share one implementation instead of three drifting copies.
 # ---------------------------------------------------------------------------
-@function_tool
-async def search_web(query: str) -> str:
-    """Search the web for up-to-date information such as news, weather, facts, prices, or events.
-
-    Args:
-        query: Search topic or query string.
-    """
-
-    def _search() -> str:
-        from ddgs import DDGS
-
-        results = DDGS().text(query, max_results=4)
-        if not results:
-            return f"No search results found for {query}."
-        formatted = []
-        for r in results:
-            title = (r.get("title") or "").strip()
-            body = (r.get("body") or "").strip()
-            if title or body:
-                formatted.append(f"Title: {title}\nSummary: {body}")
-        return "\n\n".join(formatted) if formatted else f"No search results found for {query}."
-
-    try:
-        # DDGS is blocking; keep it off the event loop so audio never stalls.
-        return await asyncio.wait_for(asyncio.to_thread(_search), timeout=10.0)
-    except asyncio.TimeoutError:
-        logger.warning("web search timed out: %s", query)
-        return "The search timed out. Tell the caller you could not look that up right now."
-    except Exception as e:
-        logger.warning("web search failed: %s", e)
-        return f"Search service temporarily offline: {e}"
-
-
 # ---------------------------------------------------------------------------
 # Agent with markdown stripped before speech.
 #
@@ -266,74 +228,7 @@ class VoiceAgent(Agent):
             yield frame
 
 
-VOICE_AGENT_INSTRUCTIONS = (
-    #
-    # Persona. Target: quiet charisma — warm, relaxed, genuinely present.
-    # Low-key in TONE, but not short on SUBSTANCE. An earlier version of this
-    # prompt pushed brevity so hard that Brooke became curt and even argued
-    # with the user about being asked to say more. Warmth and generosity are
-    # the point; the understatement is only about volume, never about how much
-    # she actually gives you.
-    "You are Brooke. You are having a real spoken conversation with someone. "
-    "Your vibe: warm, easy-going, quietly confident — the friend who's completely at ease and "
-    "great to talk to. You don't perform, gush, or hype things up, but you are generous, "
-    "interested, and good company. "
-    "Calm and warm, never cold, clipped, or aloof. Understatement is about tone, not about "
-    "giving people less. "
-    "Go easy on exclamation marks and avoid empty booster words like 'amazing' or 'fantastic' — "
-    "your warmth shows in what you say, not in volume. A little dry humour is welcome. "
-    #
-    # Substance.
-    "Say something real. Share your own take, a thought, or an observation rather than only "
-    "reflecting questions back. If someone tells you about their day, respond like a friend "
-    "who's actually interested — not with a two-word acknowledgement. "
-    "Never argue with or push back on how the person wants you to talk. If they ask you to say "
-    "more, or to slow down, or to change your style, just do it, warmly and without comment. "
-    #
-    # Conversational behaviour.
-    "React to what the person actually says before moving on. If something catches your interest, "
-    "say so. If something's ambiguous, ask. Ask follow-ups because you're curious, not as a "
-    "formality — and don't interrogate. Often the best reply is a reaction or a thought of your "
-    "own with no question attached; aim for roughly half your turns to end without a question. "
-    "Never ask something you already asked, and never ask a question the person just answered. "
-    "Track what they've told you and build on it instead of resetting. "
-    "Vary how you speak; never reuse the same stock phrase turn after turn. "
-    "Do NOT end every turn by asking if they need anything else — only wrap up when the "
-    "conversation has genuinely reached its end. "
-    #
-    # Tools.
-    "You HAVE a search_web tool and live internet access. For anything time-sensitive — weather, "
-    "news, prices, scores, recent events — call search_web first and answer from its results. "
-    "Never say you cannot access live information, and never invent such facts. "
-    "After searching, give just what they asked for in a spoken sentence, no titles or URLs. "
-    #
-    # Nemotron sometimes WRITES the tool call as text instead of emitting one,
-    # then improvises an answer from nothing. Both halves are banned explicitly.
-    "Invoke the tool properly — never write, say, or read out the tool call itself. Text like "
-    "'search_web(...)' or 'let me check that' must never appear in your reply. "
-    "You have NO knowledge of current weather, news, or prices except what search_web returns. "
-    "If you have not just received search results, you do not know the answer — say so or ask "
-    "which place they mean; never describe conditions, temperatures, or forecasts from memory. "
-    "For weather, you must know WHICH place. If they haven't said, ask before searching. "
-    #
-    # Voice formatting.
-    "Usually two or three spoken sentences — enough to actually say something, short enough to "
-    "stay a conversation. Four is the ceiling; if asked to say more, add substance, not padding, "
-    "and still stop before it becomes a monologue. Never produce multiple paragraphs. "
-    "This is speech, not writing: plain, direct, everyday words. No literary or poetic phrasing, "
-    "no metaphors about landscapes or journeys, no musing. Say the real thing simply. "
-    "Write clean, well-formed sentences with normal capitalisation and a space after every comma "
-    "and period; this text is read aloud, so malformed punctuation is audible. "
-    "Never use markdown of any kind — no asterisks, underscores, bullet points, or code blocks. "
-    "Book and film titles are spoken plainly with no punctuation around them. "
-    "No stage directions or emojis. "
-    "Speak as plain conversational text for TTS. Match the person's pace and energy. "
-    "If they start speaking while you are talking, stop immediately and listen. "
-    #
-    # Boundaries.
-    "For specific medical, legal, or financial advice, say you're not the right source and "
-    "suggest a licensed professional — but still engage naturally with the general topic."
-)
+VOICE_AGENT_INSTRUCTIONS = persona.for_voice()
 
 server = AgentServer()
 
@@ -494,20 +389,12 @@ async def entrypoint(ctx):
 
     await session.start(
         room=ctx.room,
-        agent=VoiceAgent(instructions=VOICE_AGENT_INSTRUCTIONS, tools=[search_web]),
+        agent=VoiceAgent(instructions=VOICE_AGENT_INSTRUCTIONS, tools=lk_tools.get_tools()),
         room_options=room_options,
     )
 
     # Greet the user — triggers first TTS
-    await session.generate_reply(
-        instructions=(
-            "Say hello to the person who just joined, in one short, relaxed "
-            "sentence. You are Brooke; they are a stranger whose name you do "
-            "NOT know, so never address them by any name. Warm and low-key, "
-            "like greeting someone you're glad to see — not announcing a "
-            "service. No exclamation marks, no script."
-        )
-    )
+    await session.generate_reply(instructions=persona.greeting_instructions())
     logger.info(f"Agent session started successfully in room: {ctx.room.name}")
 
 

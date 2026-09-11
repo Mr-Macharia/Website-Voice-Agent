@@ -5,7 +5,8 @@ as MCP tools so opencode (or any MCP client) can drive the voice pipeline.
 
 Covers:
 - Deepgram STT (nova-3) + TTS (aura-luna-en / flux via REST)
-- Agno voice-agent with DuckDuckGo web search (SQLite session memory agno.db)
+- Agno site agent: RAG over the owner's knowledge base, web search, Cal.com booking
+  and lead capture (PostgreSQL session memory)
 - LiveKit token generation + room management (livekit-api)
 - Health/status mirroring server.py:/api/info
 
@@ -40,8 +41,9 @@ except ImportError as e:
 mcp = FastMCP(
     name="voice-agent",
     instructions=(
-        "Voice Agent control plane: Deepgram STT/TTS, Agno realtime voice assistant "
-        "with web search, LiveKit rooms/tokens. Mirrors server.py and livekit_worker.py for MCP clients."
+        "Voice Agent control plane: Deepgram STT/TTS, the Agno site agent (RAG over "
+        "the owner's knowledge base, web search, Cal.com booking, lead capture), and "
+        "LiveKit rooms/tokens. Shares core/ with server.py and livekit_worker.py."
     ),
 )
 
@@ -65,92 +67,58 @@ _voice_agent: Any = None
 
 
 def _get_voice_agent():
+    """The same agent server.py serves, built from the shared core module.
+
+    This used to re-declare its own WebSearchTools and Agent inline, and scrape
+    server.py with a regex to recover the system prompt — which broke silently
+    the moment that prompt stopped being a triple-quoted literal. Now it imports
+    the one definition, so it can never drift again.
+    """
     global _voice_agent
     if _voice_agent is not None:
         return _voice_agent
+
     from agno.agent import Agent
-    from agno.models.xai import xAI
     from agno.models.openai import OpenAIChat
-    from agno.db.sqlite import SqliteDb
-    from agno.tools import Toolkit
+    from agno.models.xai import xAI
 
-    class WebSearchTools(Toolkit):
-        def __init__(self):
-            super().__init__(name="web_search_tools")
-            self.register(self.search_web)
+    from core import config as core_config
+    from core import db as core_db
+    from core import knowledge as core_knowledge
+    from core import persona
+    from core.adapters.agno import SiteTools
 
-        def search_web(self, query: str) -> str:
-            """Search the web for up-to-date information such as news, weather, facts, prices, or events.
-
-            Args:
-                query (str): Search topic or query string.
-            Returns:
-                str: Titles and summaries of the top web results.
-            """
-            try:
-                from ddgs import DDGS
-
-                results = DDGS().text(query, max_results=4)
-                if not results:
-                    return f"No search results found for {query}."
-                formatted = []
-                for r in results:
-                    title = (r.get("title") or "").strip()
-                    body = (r.get("body") or "").strip()
-                    if title or body:
-                        formatted.append(f"Title: {title}\nSummary: {body}")
-                return "\n\n".join(formatted) if formatted else f"No search results found for {query}."
-            except Exception as e:
-                return f"Search service temporarily offline: {e}"
-
-    db = SqliteDb(
-        db_file=str(BACKEND_DIR / "agno.db"),
-        session_table="agent_sessions",
-        memory_table="user_memories",
-    )
-    xai_key = os.getenv("XAI_API_KEY")
-    openai_key = os.getenv("OPENAI_API_KEY")
-    bedrock_url = os.getenv("BEDROCK_BASE_URL", "https://bedrock-mantle.us-east-1.api.aws/v1")
-    bedrock_key = os.getenv("BEDROCK_API_KEY")
-    bedrock_model = os.getenv("BEDROCK_MODEL_ID", "nvidia.nemotron-nano-3-30b")
-    if bedrock_key:
-        llm = OpenAIChat(id=bedrock_model, api_key=bedrock_key, base_url=bedrock_url)
-    elif xai_key:
-        llm = xAI(id="grok-4.20-0309-non-reasoning", api_key=xai_key)
+    if core_config.BEDROCK_API_KEY:
+        llm = OpenAIChat(
+            id=core_config.BEDROCK_MODEL_ID,
+            api_key=core_config.BEDROCK_API_KEY,
+            base_url=core_config.BEDROCK_BASE_URL,
+        )
+    elif core_config.XAI_API_KEY:
+        llm = xAI(id="grok-4.20-0309-non-reasoning", api_key=core_config.XAI_API_KEY)
     else:
-        llm = OpenAIChat(id="gpt-4o-mini", api_key=openai_key)
+        llm = OpenAIChat(id="gpt-4o-mini", api_key=core_config.OPENAI_API_KEY)
 
-    # Mirror server.py:79 VOICE_AGENT_SYSTEM_PROMPT excerpt for brevity; full prompt persisted in server.py
-    system_prompt = BACKEND_DIR / "server.py"
-    # we reuse server.VOICE_AGENT_SYSTEM_PROMPT at runtime if available
-    try:
-        import importlib.util
+    db = None
+    if core_config.DATABASE_URL:
+        try:
+            db = core_db.get_agno_db()
+        except Exception:
+            db = None
 
-        spec = importlib.util.spec_from_file_location("server_mod", system_prompt)
-        mod = importlib.util.module_from_spec(spec)  # type: ignore
-        # don't exec full server (starts FastAPI), just read prompt string manually
-        text = system_prompt.read_text()
-        # fallback hardcoded concise prompt if import fails
-        prompt_text = "You are Brooke, a fast, warm, concise voice assistant. Keep replies 1-2 sentences, plain text, no markdown."
-        if "VOICE_AGENT_SYSTEM_PROMPT" in text:
-            # extract triple-quoted block after assignment
-            import re
-
-            m = re.search(r'VOICE_AGENT_SYSTEM_PROMPT\s*=\s*"""(.*?)"""', text, re.S)
-            if m:
-                prompt_text = m.group(1).strip()
-    except Exception:
-        prompt_text = "You are Brooke, a fast, warm, concise voice assistant. Keep replies 1-2 sentences, plain text, no markdown."
+    knowledge = core_knowledge.get_knowledge()
 
     _voice_agent = Agent(
         id="voice-agent",
         name="Realtime Voice Assistant",
         model=llm,
-        tools=[WebSearchTools()],
-        description="Fast, conversational virtual assistant speaking naturally over voice.",
-        instructions=[prompt_text],
+        tools=[SiteTools()],
+        description=f"Voice assistant for {core_config.OWNER_NAME}'s website.",
+        instructions=[persona.for_voice()],
         markdown=False,
         db=db,
+        knowledge=knowledge,
+        search_knowledge=bool(knowledge),
         add_history_to_context=True,
         num_history_runs=4,
         enable_session_summaries=False,
@@ -364,7 +332,7 @@ async def agno_voice_run(
 
     Args:
         message: User transcript/text to respond to.
-        session_id: Optional session id for memory (persists in agno.db). Auto-generated if omitted.
+        session_id: Optional session id for memory (persists in Postgres). Auto-generated if omitted.
         stream: If true, uses streaming internally but returns concatenated text (MCP is request/response).
     Returns:
         Agent response text (plain, voice-ready, no markdown).
@@ -403,70 +371,53 @@ async def agno_voice_run(
 @mcp.tool()
 def agno_list_sessions(limit: int = 10) -> str:
     """
-    List recent Agno sessions from agno.db (sqlite).
+    List recent Agno sessions from PostgreSQL.
 
     Args:
         limit: Max sessions to return.
     Returns:
         JSON of session ids, agent_ids, updated_at.
     """
-    import sqlite3
+    from sqlalchemy import text
 
-    db_path = Path(__file__).parent.parent / "agno.db"
-    if not db_path.exists():
-        db_path = Path("agno.db")
-    if not db_path.exists():
-        return "No agno.db found (no sessions yet)"
+    from core import config as core_config
+    from core import db as core_db
+
+    if not core_config.DATABASE_URL:
+        return "DATABASE_URL is not set — no session store configured."
     try:
-        con = sqlite3.connect(str(db_path))
-        cur = con.cursor()
-        # try common table names from server.py:57
-        for table in ("agent_sessions", "sessions", "agent_session"):
-            try:
-                cur.execute(f"SELECT session_id, agent_id, updated_at, created_at FROM {table} ORDER BY updated_at DESC LIMIT ?", (limit,))
-                rows = cur.fetchall()
-                cols = [d[0] for d in cur.description]
-                con.close()
-                return json.dumps([dict(zip(cols, r)) for r in rows], indent=2, default=str)
-            except Exception:
-                continue
-        # fallback: list tables
-        cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
-        tables = cur.fetchall()
-        con.close()
-        return f"No session table found. Tables: {tables}"
+        with core_db.get_engine().connect() as conn:
+            rows = conn.execute(
+                text(
+                    "SELECT session_id, agent_id, updated_at, created_at "
+                    "FROM agent_sessions ORDER BY updated_at DESC LIMIT :limit"
+                ),
+                {"limit": limit},
+            )
+            return json.dumps([dict(r._mapping) for r in rows], indent=2, default=str)
     except Exception as e:
-        return f"Error reading agno.db: {e}"
+        return f"Error reading sessions: {e}"
 
 
 @mcp.tool()
 def agno_get_memory(limit: int = 5) -> str:
-    """List recent user memories from agno.db memory_table."""
-    import sqlite3
+    """List recent user memories from PostgreSQL."""
+    from sqlalchemy import text
 
-    db_path = Path(__file__).parent.parent / "agno.db"
-    if not db_path.exists():
-        db_path = Path("agno.db")
-    if not db_path.exists():
-        return "No agno.db found"
+    from core import config as core_config
+    from core import db as core_db
+
+    if not core_config.DATABASE_URL:
+        return "DATABASE_URL is not set — no memory store configured."
     try:
-        con = sqlite3.connect(str(db_path))
-        cur = con.cursor()
-        for table in ("user_memories", "memories", "memory"):
-            try:
-                cur.execute(f"SELECT * FROM {table} ORDER BY rowid DESC LIMIT ?", (limit,))
-                rows = cur.fetchall()
-                cols = [d[0] for d in cur.description]
-                con.close()
-                return json.dumps([dict(zip(cols, r)) for r in rows], indent=2, default=str)[:6000]
-            except Exception:
-                continue
-        cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
-        tables = cur.fetchall()
-        con.close()
-        return f"No memory table. Tables: {tables}"
+        with core_db.get_engine().connect() as conn:
+            rows = conn.execute(
+                text("SELECT * FROM user_memories ORDER BY updated_at DESC LIMIT :limit"),
+                {"limit": limit},
+            )
+            return json.dumps([dict(r._mapping) for r in rows], indent=2, default=str)[:6000]
     except Exception as e:
-        return f"Error: {e}"
+        return f"Error reading memories: {e}"
 
 
 # ---------------------------------------------------------------------------
@@ -553,9 +504,22 @@ def health_check() -> str:
     Returns agents, LiveKit URL, Deepgram status, DB existence.
     """
     lk_url, _, _ = _get_livekit_creds()
-    db_path = Path(__file__).parent.parent / "agno.db"
-    if not db_path.exists():
-        db_path = Path("agno.db")
+
+    from core import config as core_config
+    from core import db as core_db
+
+    db_ok = False
+    db_error = None
+    if core_config.DATABASE_URL:
+        try:
+            from sqlalchemy import text
+
+            with core_db.get_engine().connect() as conn:
+                conn.execute(text("SELECT 1"))
+            db_ok = True
+        except Exception as e:
+            db_error = str(e)
+
     return json.dumps(
         {
             "status": "ok",
@@ -563,8 +527,11 @@ def health_check() -> str:
             "agents": ["voice-agent"],
             "livekit_url": lk_url,
             "deepgram_enabled": bool(_get_deepgram_api_key()),
-            "db_exists": db_path.exists(),
-            "db_path": str(db_path),
+            "database_configured": bool(core_config.DATABASE_URL),
+            "database_reachable": db_ok,
+            "database_error": db_error,
+            "knowledge_enabled": core_config.knowledge_available(),
+            "booking_enabled": core_config.booking_available(),
         },
         indent=2,
     )

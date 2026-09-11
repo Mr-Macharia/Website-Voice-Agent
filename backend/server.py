@@ -28,52 +28,33 @@ import websockets
 from agno.agent import Agent
 from agno.models.xai import xAI
 from agno.models.openai import OpenAIChat
-from agno.db.sqlite import SqliteDb
 from agno.os import AgentOS
-from agno.tools import Toolkit
 from livekit import api
 
-class WebSearchTools(Toolkit):
-    def __init__(self):
-        super().__init__(name="web_search_tools")
-        self.register(self.search_web)
-
-    def search_web(self, query: str) -> str:
-        """Search the web for up-to-date information such as news, weather, facts, prices, or events.
-
-        Args:
-            query (str): Search topic or query string.
-        Returns:
-            str: Titles and summaries of the top web results.
-        """
-        try:
-            from ddgs import DDGS
-
-            results = DDGS().text(query, max_results=4)
-            if not results:
-                return f"No search results found for {query}."
-            formatted = []
-            for r in results:
-                title = (r.get("title") or "").strip()
-                body = (r.get("body") or "").strip()
-                if title or body:
-                    formatted.append(f"Title: {title}\nSummary: {body}")
-            return "\n\n".join(formatted) if formatted else f"No search results found for {query}."
-        except Exception as e:
-            return f"Search service temporarily offline: {e}"
+# Shared core — persona, knowledge and tools live here so the voice agent, this
+# text agent and the MCP server all use one implementation.
+from core import config as core_config
+from core import db as core_db
+from core import knowledge as core_knowledge
+from core import persona
+from core.adapters.agno import SiteTools
 
 # ---------------------------------------------------------------------------
-# Database & Memory Persistence
+# Database & Memory Persistence — PostgreSQL
 # ---------------------------------------------------------------------------
-DB_PATH = str(BACKEND_DIR / "agno.db")
-
-db = SqliteDb(
-    db_file=DB_PATH,
-    session_table="agent_sessions",
-    eval_table="eval_runs",
-    memory_table="user_memories",
-    metrics_table="metrics",
-)
+# Sessions, memory, metrics, knowledge metadata and leads all live in Postgres.
+# Built lazily so the API still boots (and /api/info still answers) when the
+# database is unreachable — important for a hosted deployment.
+db = None
+if core_config.DATABASE_URL:
+    try:
+        core_db.init_schema()
+        db = core_db.get_agno_db()
+        print(f"[startup] Postgres connected: sessions, memory and leads persisted")
+    except Exception as e:
+        print(f"[startup] WARNING: Postgres unavailable ({e}). Running without persistence.")
+else:
+    print("[startup] WARNING: DATABASE_URL not set. Running without persistence.")
 
 # ---------------------------------------------------------------------------
 # Agent Definitions
@@ -92,98 +73,50 @@ elif xai_key:
 else:
     llm_model = OpenAIChat(id="gpt-4o-mini", api_key=openai_key)
 
-VOICE_AGENT_SYSTEM_PROMPT = """
-## CRITICAL: YOU ARE A TEXT GENERATOR FOR A REAL-TIME VOICE SYSTEM
+# Prompts now come from core/persona.py — one identity, layered per channel.
+# The old inline prompt described a "general-purpose virtual assistant speaking
+# over the phone", which is wrong for a site about one person.
+VOICE_AGENT_SYSTEM_PROMPT = persona.for_voice()
+TEXT_AGENT_SYSTEM_PROMPT = persona.for_text()
 
-You generate conversational text that is converted to speech in real time by Deepgram Flux TTS.
+_site_tools = SiteTools()
+_knowledge = core_knowledge.get_knowledge()
 
-FORMATTING RULES (CRITICAL):
-- Generate ONLY plain conversational text.
-- NO markdown formatting: no # headers, no **bold**, no *italics*, no - bullets, no numbered lists.
-- NO brackets or parentheticals: do NOT write [pause], (smiling), [clears throat], etc.
-- NO stage directions or emojis.
-- Write as if you are writing a script for someone else to read aloud verbatim.
-- Use line breaks in lists when needed.
-
-RESPONSE GUIDELINES:
-- Keep most responses to 1-2 short, natural sentences (under 120 characters, max 300 when detail is requested).
-- You have instant access to information. Never say "Let me check", "One moment", or "Hold on" — respond directly as if the information is already in front of you.
-- Use your web search tool ONLY for current information you don't reliably know: news, weather, prices, scores, recent events. Never search for general knowledge or chitchat.
-- When you use search results, answer in one short spoken sentence with just what the caller asked for — no titles, URLs, or source lists.
-- Pause after questions to allow for replies. Confirm what the customer said if uncertain. Never interrupt.
-- End responses with a clear question or prompt to keep the conversation flowing smoothly when appropriate.
-- Speak in natural, flowing conversational sentences instead of lists.
-
-#Role
-You are a general-purpose virtual assistant speaking to users over the phone. Your task is to help them find accurate, helpful information across a wide range of everyday topics.
-
-#General Guidelines
--Be warm, friendly, and professional.
--Speak clearly and naturally in plain language.
--Keep most responses to 1-2 sentences and under 120 characters unless the caller asks for more detail (max: 300 characters).
--Do not use markdown formatting, like code blocks, quotes, bold, links, or italics.
--Use line breaks in lists.
--Use varied phrasing; avoid repetition.
--If unclear, ask for clarification.
--If the user's message is empty, respond with an empty message.
--If asked about your well-being, respond briefly and kindly.
-
-#Voice-Specific Instructions
--Speak in a conversational tone—your responses will be spoken aloud.
--Pause after questions to allow for replies.
--Confirm what the customer said if uncertain.
--Never interrupt.
-
-#Style
--Use active listening cues.
--Be warm and understanding, but concise.
--Use simple words unless the caller uses technical terms.
-
-#Call Flow Objective
--Greet the caller and introduce yourself:
-"Hi there, I'm your virtual assistant—how can I help today?"
--Your primary goal is to help users quickly find the information they're looking for. This may include:
-Quick facts: "The capital of Japan is Tokyo."
-Weather: "It's currently 68 degrees and cloudy in Seattle."
-Local info: "There's a pharmacy nearby open until 9 PM."
-Basic how-to guidance: "To restart your phone, hold the power button for 5 seconds."
-FAQs: "Most returns are accepted within 30 days with a receipt."
-Navigation help: "Can you tell me the address or place you're trying to reach?"
--If the request is unclear:
-"Just to confirm, did you mean...?" or "Can you tell me a bit more?"
--If the request is out of scope (e.g. legal, financial, or medical advice):
-"I'm not able to provide advice on that, but I can help you find someone who can."
-
-#Off-Scope Questions
--If asked about sensitive topics like health, legal, or financial matters:
-"I'm not qualified to answer that, but I recommend reaching out to a licensed professional."
-
-#User Considerations
--Callers may be in a rush, distracted, or unsure how to phrase their question. Stay calm, helpful, and clear—especially when the user seems stressed, confused, or overwhelmed.
-
-#Closing
--Always ask:
-"Is there anything else I can help you with today?"
--Then thank them warmly and say:
-"Thanks for calling. Take care and have a great day!"
-
-#SPEAKING STYLE AND PRONUNCIATION
-- Read dates in spoken form ("Tuesday, March fifteenth"), not numerical ("3/15").
-- Read times in twelve-hour format ("three PM").
-- Read numbers and abbreviations naturally.
-"""
-
+# Voice agent — drives the /ws/voice bridge, so it gets the spoken formatting
+# rules (no markdown, short sentences, spoken dates).
 voice_agent = Agent(
     id="voice-agent",
     name="Realtime Voice Assistant",
     model=llm_model,
-    tools=[WebSearchTools()],
-    description="Fast, conversational virtual assistant speaking naturally over voice.",
+    tools=[_site_tools],
+    description=f"Voice assistant for {core_config.OWNER_NAME}'s website.",
     instructions=[VOICE_AGENT_SYSTEM_PROMPT],
     markdown=False,
     db=db,
+    knowledge=_knowledge,
+    search_knowledge=bool(_knowledge),
     add_history_to_context=True,
     num_history_runs=4,
+    enable_session_summaries=False,
+    add_datetime_to_context=True,
+)
+
+# Text agent — what the website chat talks to. Same identity and tools, but
+# written rather than spoken, and knowledge is attached directly so Agno emits
+# extra_data.references, which the frontend already renders as citations.
+text_agent = Agent(
+    id="site-agent",
+    name=f"Ask about {core_config.OWNER_NAME}",
+    model=llm_model,
+    tools=[_site_tools],
+    description=f"Answers questions about {core_config.OWNER_NAME} and books meetings.",
+    instructions=[TEXT_AGENT_SYSTEM_PROMPT],
+    markdown=True,
+    db=db,
+    knowledge=_knowledge,
+    search_knowledge=bool(_knowledge),
+    add_history_to_context=True,
+    num_history_runs=6,
     enable_session_summaries=False,
     add_datetime_to_context=True,
 )
@@ -218,9 +151,17 @@ async def info_check():
     return {
         "status": "ok",
         "service": "agno-agent-os",
-        "agents": ["voice-agent"],
+        "agents": ["site-agent", "voice-agent"],
         "livekit_url": LIVEKIT_URL,
-        "deepgram_enabled": bool(DEEPGRAM_API_KEY)
+        "deepgram_enabled": bool(DEEPGRAM_API_KEY),
+        # Features degrade independently; this says which are actually live.
+        "features": {
+            "persistence": db is not None,
+            "knowledge": _knowledge is not None,
+            "booking": core_config.booking_available(),
+            "leads": core_config.leads_available(),
+            "lead_notification": core_config.lead_notification_available(),
+        },
     }
 
 # ---------------------------------------------------------------------------
@@ -862,8 +803,13 @@ async def deepgram_agent_websocket(client_ws: WebSocket):
 # Initialize Agno AgentOS
 # ---------------------------------------------------------------------------
 agent_os = AgentOS(
-    description="Agno Realtime Voice Assistant OS",
-    agents=[voice_agent],
+    description=f"{core_config.OWNER_NAME} — personal site agent",
+    # text_agent first: the frontend auto-selects the first agent when no
+    # ?agent= is in the URL, and the website chat should land on it.
+    agents=[text_agent, voice_agent],
+    # Registering knowledge mounts /knowledge/* REST endpoints for inspecting
+    # and managing indexed content.
+    knowledge=[_knowledge] if _knowledge else None,
     base_app=base_app,
 )
 
