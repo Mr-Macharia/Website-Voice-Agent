@@ -77,6 +77,14 @@ CALCOM_BOOKING_URL = _get(
     "CALCOM_BOOKING_URL", "https://cal.com/macharia/ai-and-automation-consultation"
 )
 
+# --- Composio / Gmail -----------------------------------------------------
+COMPOSIO_API_KEY = _get("COMPOSIO_API_KEY")
+COMPOSIO_USER_ID = _get("COMPOSIO_USER_ID", "gichogu-site-agent")
+# notify (drafts only) | read (drafts + read mail) | full (everything, incl.
+# irreversible deletes). See core/tools/gmail.py — this is a security control,
+# not a convenience setting, because the agent is public-facing.
+GMAIL_SCOPE = _get("GMAIL_SCOPE", "notify")
+
 # --- Lead notification ----------------------------------------------------
 LEAD_NOTIFY_EMAIL = _get("LEAD_NOTIFY_EMAIL")
 LEAD_SMTP_HOST = _get("LEAD_SMTP_HOST", "smtp.gmail.com")
@@ -111,6 +119,10 @@ def leads_available() -> bool:
     return bool(DATABASE_URL)
 
 
+def gmail_available() -> bool:
+    return bool(COMPOSIO_API_KEY)
+
+
 def lead_notification_available() -> bool:
     return bool(LEAD_NOTIFY_EMAIL and LEAD_SMTP_USER and LEAD_SMTP_APP_PASSWORD)
 
@@ -121,6 +133,7 @@ def missing_for(feature: str) -> list[str]:
         "knowledge": {"DATABASE_URL": DATABASE_URL, "DEEPINFRA_API_KEY": DEEPINFRA_API_KEY},
         "booking": {"CALCOM_BOOKING_URL": CALCOM_BOOKING_URL},
         "leads": {"DATABASE_URL": DATABASE_URL},
+        "gmail": {"COMPOSIO_API_KEY": COMPOSIO_API_KEY},
         "lead_notification": {
             "LEAD_NOTIFY_EMAIL": LEAD_NOTIFY_EMAIL,
             "LEAD_SMTP_USER": LEAD_SMTP_USER,

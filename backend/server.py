@@ -39,6 +39,7 @@ from core import guardrails
 from core import knowledge as core_knowledge
 from core import persona
 from core.adapters.agno import SiteTools
+from core.tools import gmail as _gmail
 
 # ---------------------------------------------------------------------------
 # Database & Memory Persistence — PostgreSQL
@@ -83,13 +84,17 @@ TEXT_AGENT_SYSTEM_PROMPT = persona.for_text()
 _site_tools = SiteTools()
 _knowledge = core_knowledge.get_knowledge()
 
+# Gmail via Composio, scoped by GMAIL_SCOPE (default: drafts only). Composio
+# returns plain callables, which Agno accepts alongside a Toolkit.
+_agent_tools = [_site_tools, *_gmail.get_tools()]
+
 # Voice agent — drives the /ws/voice bridge, so it gets the spoken formatting
 # rules (no markdown, short sentences, spoken dates).
 voice_agent = Agent(
     id="voice-agent",
     name="Realtime Voice Assistant",
     model=llm_model,
-    tools=[_site_tools],
+    tools=_agent_tools,
     description=f"Voice assistant for {core_config.OWNER_NAME}'s website.",
     instructions=[VOICE_AGENT_SYSTEM_PROMPT],
     markdown=False,
@@ -109,7 +114,7 @@ text_agent = Agent(
     id="site-agent",
     name=f"Ask about {core_config.OWNER_NAME}",
     model=llm_model,
-    tools=[_site_tools],
+    tools=_agent_tools,
     description=f"Answers questions about {core_config.OWNER_NAME} and books meetings.",
     instructions=[TEXT_AGENT_SYSTEM_PROMPT],
     markdown=True,
@@ -162,6 +167,8 @@ async def info_check():
             "booking": core_config.booking_available(),
             "leads": core_config.leads_available(),
             "lead_notification": core_config.lead_notification_available(),
+            "gmail": core_config.gmail_available(),
+            "gmail_scope": core_config.GMAIL_SCOPE if core_config.gmail_available() else None,
         },
     }
 

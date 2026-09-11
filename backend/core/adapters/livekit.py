@@ -16,6 +16,7 @@ from core import config
 from core.tools import about as _about
 from core.tools import booking as _booking
 from core.tools import leads as _leads
+from core.tools import gmail as _gmail
 from core.tools import search as _search
 
 
@@ -100,5 +101,8 @@ def get_tools() -> list:
 
     if config.leads_available():
         tools.append(capture_lead)
+
+    # Composio returns plain callables; LiveKit accepts those as tools too.
+    tools.extend(_gmail.get_tools())
 
     return tools
