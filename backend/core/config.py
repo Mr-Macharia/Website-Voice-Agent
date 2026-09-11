@@ -63,9 +63,11 @@ EMBED_DIMENSIONS = _get_int("EMBED_DIMENSIONS", 768)
 KNOWLEDGE_TOP_K = _get_int("KNOWLEDGE_TOP_K", 4)
 
 # --- Cal.com --------------------------------------------------------------
-CALCOM_API_KEY = _get("CALCOM_API_KEY")
-CALCOM_EVENT_TYPE_ID = _get_int("CALCOM_EVENT_TYPE_ID")
-CALCOM_USER_TIMEZONE = _get("CALCOM_USER_TIMEZONE", "Africa/Nairobi")
+# The public booking page. The agent hands this over rather than reading
+# availability through the API — see core/tools/booking.py for why.
+CALCOM_BOOKING_URL = _get(
+    "CALCOM_BOOKING_URL", "https://cal.com/macharia/ai-and-automation-consultation"
+)
 
 # --- Lead notification ----------------------------------------------------
 LEAD_NOTIFY_EMAIL = _get("LEAD_NOTIFY_EMAIL")
@@ -94,7 +96,7 @@ def knowledge_available() -> bool:
 
 
 def booking_available() -> bool:
-    return bool(CALCOM_API_KEY and CALCOM_EVENT_TYPE_ID)
+    return bool(CALCOM_BOOKING_URL)
 
 
 def leads_available() -> bool:
@@ -109,7 +111,7 @@ def missing_for(feature: str) -> list[str]:
     """Names of the env vars a feature needs but doesn't have. For diagnostics."""
     required = {
         "knowledge": {"DATABASE_URL": DATABASE_URL, "DEEPINFRA_API_KEY": DEEPINFRA_API_KEY},
-        "booking": {"CALCOM_API_KEY": CALCOM_API_KEY, "CALCOM_EVENT_TYPE_ID": CALCOM_EVENT_TYPE_ID},
+        "booking": {"CALCOM_BOOKING_URL": CALCOM_BOOKING_URL},
         "leads": {"DATABASE_URL": DATABASE_URL},
         "lead_notification": {
             "LEAD_NOTIFY_EMAIL": LEAD_NOTIFY_EMAIL,

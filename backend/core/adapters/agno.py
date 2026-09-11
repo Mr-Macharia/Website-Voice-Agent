@@ -50,8 +50,7 @@ class SiteTools(Toolkit):
         self.register(self.search_web)
 
         if config.booking_available():
-            self.register(self.get_available_slots)
-            self.register(self.book_meeting)
+            self.register(self.get_booking_link)
         if config.leads_available():
             self.register(self.capture_lead)
 
@@ -79,33 +78,18 @@ class SiteTools(Toolkit):
         """
         return _run(_search.search_web, query)
 
-    def get_available_slots(self, start_date: str, end_date: str) -> str:
-        """Get Gichogu's free meeting slots between two dates.
+    def get_booking_link(self) -> str:
+        """Get the link where someone can book a meeting with Gichogu.
 
-        Call this before offering any times — never guess availability.
+        Use this when a visitor wants to meet, talk, get on a call, or asks
+        about availability. Give them the link and say briefly what the session
+        is for. Do not invent specific times — the page shows his real
+        availability.
 
-        Args:
-            start_date (str): First day to check, as YYYY-MM-DD.
-            end_date (str): Last day to check, as YYYY-MM-DD.
         Returns:
-            str: The available slots.
+            str: The booking URL and how to present it.
         """
-        return _run(_booking.get_available_slots, start_date, end_date)
-
-    def book_meeting(self, start_time: str, name: str, email: str) -> str:
-        """Book a meeting with Gichogu at a confirmed free slot.
-
-        Only call this after the visitor has picked a slot you offered AND given
-        their name and email. Confirm the details back to them first.
-
-        Args:
-            start_time (str): Slot start in ISO 8601, e.g. 2026-03-15T15:00:00Z.
-            name (str): The visitor's name.
-            email (str): The visitor's email address.
-        Returns:
-            str: Confirmation of the booking.
-        """
-        return _run(_booking.book_meeting, start_time, name, email)
+        return _run(_booking.get_booking_link)
 
     def capture_lead(
         self,

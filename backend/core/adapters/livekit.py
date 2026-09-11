@@ -44,31 +44,14 @@ async def search_about_owner(query: str) -> str:
 
 
 @function_tool
-async def get_available_slots(start_date: str, end_date: str) -> str:
-    """Get Gichogu's free meeting slots between two dates.
+async def get_booking_link() -> str:
+    """Get the link where someone can book a meeting with Gichogu.
 
-    Call this before offering any times — never guess availability.
-
-    Args:
-        start_date: First day to check, as YYYY-MM-DD.
-        end_date: Last day to check, as YYYY-MM-DD.
+    Use this when a visitor wants to meet, talk, get on a call, or asks about
+    availability. Give them the link and say briefly what the session is for.
+    Do not invent specific times — the page shows his real availability.
     """
-    return await _booking.get_available_slots(start_date, end_date)
-
-
-@function_tool
-async def book_meeting(start_time: str, name: str, email: str) -> str:
-    """Book a meeting with Gichogu at a confirmed free slot.
-
-    Only call this after the visitor has picked a slot you offered AND given
-    their name and email. Confirm the details back to them first.
-
-    Args:
-        start_time: Slot start in ISO 8601, e.g. 2026-03-15T15:00:00Z.
-        name: The visitor's name.
-        email: The visitor's email address.
-    """
-    return await _booking.book_meeting(start_time, name, email)
+    return await _booking.get_booking_link()
 
 
 @function_tool
@@ -113,7 +96,7 @@ def get_tools() -> list:
     tools = [search_web, search_about_owner]
 
     if config.booking_available():
-        tools.extend([get_available_slots, book_meeting])
+        tools.append(get_booking_link)
 
     if config.leads_available():
         tools.append(capture_lead)
