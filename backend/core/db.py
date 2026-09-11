@@ -77,11 +77,24 @@ def init_schema() -> None:
     _metadata.create_all(get_engine())
 
 
+_agno_db: Optional[Any] = None
+
+
 def get_agno_db() -> Any:
-    """PostgresDb for sessions, memory, metrics and knowledge-content metadata."""
+    """PostgresDb for sessions, memory, metrics and knowledge-content metadata.
+
+    Cached: Agno derives a database id from the connection details, so building
+    a second instance over the same engine makes its registry warn about
+    "multiple distinct databases share id" on every agent construction. One
+    instance, shared by both agents, is also simply correct.
+    """
+    global _agno_db
+    if _agno_db is not None:
+        return _agno_db
+
     from agno.db.postgres import PostgresDb
 
-    return PostgresDb(
+    _agno_db = PostgresDb(
         db_engine=get_engine(),
         session_table="agent_sessions",
         memory_table="user_memories",
@@ -89,6 +102,7 @@ def get_agno_db() -> Any:
         eval_table="eval_runs",
         knowledge_table="agno_knowledge",
     )
+    return _agno_db
 
 
 def get_embedder() -> Any:

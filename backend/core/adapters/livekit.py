@@ -10,6 +10,8 @@ so leads captured on the voice path are tagged source="voice" here.
 
 from __future__ import annotations
 
+import logging
+
 from livekit.agents import function_tool
 
 from core import config
@@ -18,6 +20,8 @@ from core.tools import booking as _booking
 from core.tools import leads as _leads
 from core.tools import gmail as _gmail
 from core.tools import search as _search
+
+logger = logging.getLogger("core.adapters.livekit")
 
 
 @function_tool
@@ -102,7 +106,16 @@ def get_tools() -> list:
     if config.leads_available():
         tools.append(capture_lead)
 
-    # Composio returns plain callables; LiveKit accepts those as tools too.
-    tools.extend(_gmail.get_tools())
+    # Composio returns plain callables. Agno accepts those, but LiveKit requires
+    # FunctionTool instances and raises ValueError otherwise — which took down
+    # the whole voice session, not just the Gmail tool. Convert each one.
+    for fn in _gmail.get_tools():
+        try:
+            tools.append(function_tool(fn))
+        except Exception as e:  # never let an optional tool break voice
+            logger.warning(
+                "Skipping Gmail tool %s for voice: %s",
+                getattr(fn, "__name__", "?"), e,
+            )
 
     return tools

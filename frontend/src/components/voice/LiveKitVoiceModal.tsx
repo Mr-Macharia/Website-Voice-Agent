@@ -1599,13 +1599,24 @@ export const LiveKitVoiceModal: React.FC<LiveKitVoiceModalProps> = ({
 }) => {
   const [token, setToken] = useState<string>('')
   const [wsUrl, setWsUrl] = useState<string>('')
-  const [isLoading, setIsLoading] = useState(false)
-  const [useFallbackMode, setUseFallbackMode] = useState(true)
+  // Start loading: until the token fetch resolves we must not render EITHER
+  // session. Previously useFallbackMode defaulted to true and isLoading to
+  // false, so the first render mounted DirectVoiceSession and opened a
+  // /ws/voice connection before LiveKit was ever tried — the LiveKit path
+  // could never win, however well it was configured.
+  const [isLoading, setIsLoading] = useState(true)
+  const [useFallbackMode, setUseFallbackMode] = useState(false)
   const { selectedEndpoint } = useStore()
 
   useEffect(() => {
     if (!isOpen) {
+      // Reset every decision, not just the token. A stale useFallbackMode
+      // from a previous open would otherwise pin later sessions to the
+      // legacy bridge.
       setToken('')
+      setWsUrl('')
+      setUseFallbackMode(false)
+      setIsLoading(true)
       return
     }
 
@@ -1681,7 +1692,10 @@ export const LiveKitVoiceModal: React.FC<LiveKitVoiceModalProps> = ({
               Initializing Voice Session...
             </div>
           </div>
-        ) : useFallbackMode || !token || !wsUrl ? (
+        ) : /* Only fall back when the fetch explicitly decided to. A missing
+               token while not loading means the request failed, which
+               useFallbackMode already covers. */
+        useFallbackMode ? (
           <DirectVoiceSession onDisconnect={onClose} agentName={agentName} />
         ) : (
           <LiveKitRoom
