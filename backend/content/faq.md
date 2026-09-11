@@ -1,5 +1,11 @@
 # Frequently asked questions
 
+## Where does he work right now?
+
+He works at Visiondrill as an AI Engineer, and was promoted to Lead Developer
+there. He has been with them since May 2025. He also runs his own consulting
+practice, Gich AI Nexus, which he founded in January 2025.
+
 ## Who is Gichogu Macharia?
 
 Gichogu Macharia is an AI Engineer and AI Strategist based in Nairobi, Kenya.

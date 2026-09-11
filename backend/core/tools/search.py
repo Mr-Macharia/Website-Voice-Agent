@@ -19,6 +19,13 @@ SEARCH_TIMEOUT = 10.0
 
 
 def _search_sync(query: str, max_results: int = 4) -> str:
+    # ddgs imports its HTTP/2 and DNS stacks here, creating those loggers for
+    # the first time. They inherit root's level, so quiet them now — doing it
+    # at module import would be too early to have any effect.
+    from core.logging_config import quiet_noisy_loggers
+
+    quiet_noisy_loggers()
+
     from ddgs import DDGS
 
     results = DDGS().text(query, max_results=max_results)

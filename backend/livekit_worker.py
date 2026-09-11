@@ -39,35 +39,12 @@ from core.adapters import livekit as lk_tools
 logger = logging.getLogger("voice-agent-worker")
 logging.basicConfig(level=logging.INFO)
 
-# `livekit_worker.py dev` sets the ROOT logger to DEBUG, so every third-party
-# library inherits it. ddgs pulls in Rust HTTP/DNS stacks (hickory, rustls,
-# reqwest, primp) that log every DNS packet, which buries the agent's own logs
-# on any turn that calls search_web. These carry nothing useful for debugging
-# this agent, so pin them to WARNING.
-#
-# The CLI reconfigures logging AFTER this module is imported, so this has to be
-# re-applied from inside the worker callbacks, not just at import time.
-_NOISY_LOGGERS = (
-    "hickory_net",
-    "hickory_resolver",
-    "hickory_proto",
-    "h2",
-    "hpack",
-    "hyperframe",
-    "hyper_util",
-    "hyper",
-    "cookie_store",
-    "selectolax",
-    "rustls",
-    "reqwest",
-    "primp",
-    "httpx",
-    "httpcore",
-    "urllib3",
-    "ddgs",
-    "asyncio",
-)
+# Third-party logger noise is handled in core.logging_config, which is also
+# re-applied inside the search tool (those libraries are imported lazily, so
+# their loggers do not exist yet at startup).
+from core.logging_config import quiet_noisy_loggers as _quiet_noisy_loggers  # noqa: E402
 
+_quiet_noisy_loggers()
 
 # ---------------------------------------------------------------------------
 # Playback buffer.
@@ -105,12 +82,6 @@ def _widen_playback_buffer() -> None:
     except Exception as e:  # pragma: no cover - never block startup on this
         logger.warning("Could not widen playback buffer: %s", e)
 
-
-def _quiet_noisy_loggers() -> None:
-    for name in _NOISY_LOGGERS:
-        log = logging.getLogger(name)
-        log.setLevel(logging.WARNING)
-        log.propagate = False
 
 
 _quiet_noisy_loggers()

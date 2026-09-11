@@ -163,14 +163,21 @@ def ingest_github(kb, force: bool) -> int:
                     f"URL: {repo.get('html_url')}",
                 ]
 
-                # README carries the real content; the listing alone is thin.
+                # README adds real substance, but a full one can be thousands of
+                # words and chunk into a dozen entries. With ~30 repos that
+                # buries the curated bio and FAQ — the content that actually
+                # answers "who is he". Cap it so each repo contributes roughly
+                # one or two chunks.
                 try:
                     readme = client.get(
                         f"{GITHUB_API}/repos/{user}/{name}/readme",
                         headers={**headers, "Accept": "application/vnd.github.raw"},
                     )
                     if readme.status_code == 200:
-                        parts.append("\n" + readme.text)
+                        excerpt = readme.text[:config.GITHUB_README_CHARS]
+                        if len(readme.text) > config.GITHUB_README_CHARS:
+                            excerpt += "\n\n[README truncated]"
+                        parts.append("\n" + excerpt)
                 except Exception as e:
                     logger.debug("no README for %s: %s", name, e)
 
@@ -305,6 +312,14 @@ def main() -> int:
             kb.vector_db.drop()
         except Exception as e:
             logger.warning("Nothing to drop (%s)", e)
+        # drop() removes the table; nothing recreates it before the first
+        # insert, so every batch fails with UndefinedTable. Recreate it here.
+        try:
+            kb.vector_db.create()
+            logger.info("  table recreated")
+        except Exception as e:
+            logger.error("Could not recreate vector table: %s", e)
+            return 1
 
     selected = list(SOURCES) if args.source == "all" else [args.source]
     total = 0

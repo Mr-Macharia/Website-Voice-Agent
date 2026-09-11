@@ -65,6 +65,12 @@ EMBED_DIMENSIONS = _get_int("EMBED_DIMENSIONS", 768)
 CHUNK_SIZE = _get_int("CHUNK_SIZE", 1200)
 CHUNK_OVERLAP = _get_int("CHUNK_OVERLAP", 150)
 
+# --- GitHub ingestion -----------------------------------------------------
+# Cap README length. Unbounded, ~30 repos produced 231 chunks against 29 of
+# curated bio/FAQ, so repo docs crowded out the content that answers questions
+# about the person rather than the code.
+GITHUB_README_CHARS = _get_int("GITHUB_README_CHARS", 1500)
+
 # --- Retrieval ------------------------------------------------------------
 # Deliberately small: every retrieved chunk is prompt tokens, and on the voice
 # path retrieval happens before the first audio frame.

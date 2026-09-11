@@ -1,6 +1,20 @@
 # Experience
 
+## Current roles
+
+Gichogu currently works at **Visiondrill** as an AI Engineer, where he was
+promoted to Lead Developer. He has been there since May 2025. Alongside that he
+runs **Gich AI Nexus**, his own AI consulting and development practice, founded
+in January 2025 and still active.
+
+So: his current employer is Visiondrill, his current job title is Lead
+Developer, and he also consults independently through Gich AI Nexus.
+
+---
+
 ## AI Engineer → Lead Developer — Visiondrill (May 2025 – present)
+
+**This is his current job.**
 
 Nairobi, Kenya. Full-time, remote.
 
