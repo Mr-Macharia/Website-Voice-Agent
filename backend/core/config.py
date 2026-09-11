@@ -81,7 +81,7 @@ XAI_API_KEY = _get("XAI_API_KEY")
 OPENAI_API_KEY = _get("OPENAI_API_KEY")
 BEDROCK_BASE_URL = _get("BEDROCK_BASE_URL", "https://bedrock-mantle.us-east-1.api.aws/v1")
 BEDROCK_API_KEY = _get("BEDROCK_API_KEY")
-BEDROCK_MODEL_ID = _get("BEDROCK_MODEL_ID", "qwen.qwen3-next-80b-a3b-instruct")
+BEDROCK_MODEL_ID = _get("BEDROCK_MODEL_ID", "deepseek.v3.2")
 
 # --- Content --------------------------------------------------------------
 CONTENT_DIR = BACKEND_DIR / "content"

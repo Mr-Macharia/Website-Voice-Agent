@@ -35,6 +35,7 @@ from livekit import api
 # text agent and the MCP server all use one implementation.
 from core import config as core_config
 from core import db as core_db
+from core import guardrails
 from core import knowledge as core_knowledge
 from core import persona
 from core.adapters.agno import SiteTools
@@ -63,7 +64,7 @@ xai_key = os.getenv("XAI_API_KEY")
 openai_key = os.getenv("OPENAI_API_KEY")
 bedrock_url = os.getenv("BEDROCK_BASE_URL", "https://bedrock-mantle.us-east-1.api.aws/v1")
 bedrock_key = os.getenv("BEDROCK_API_KEY")
-bedrock_model = os.getenv("BEDROCK_MODEL_ID", "nvidia.nemotron-nano-3-30b")
+bedrock_model = os.getenv("BEDROCK_MODEL_ID", "deepseek.v3.2")
 
 # Select primary model — Bedrock first, existing fallbacks untouched
 if bedrock_key:
@@ -339,7 +340,10 @@ async def voice_websocket(client_ws: WebSocket):
                     if not force and len(speak_buffer) < 24:
                         if speak_buffer.strip() and speak_buffer.strip()[-1] not in ".!?":
                             return
-                    text_to_send = speak_buffer
+                    # Strip any URL the agent invented rather than got from a
+                    # tool. Applied at flush, where text is already coalesced,
+                    # so a URL split across tokens is still matched.
+                    text_to_send = guardrails.strip_unapproved_urls(speak_buffer)
                     if not prev_ends_with_space and text_to_send and not text_to_send[0].isspace() and text_to_send[0] not in ".,!?;:')\"":
                         text_to_send = " " + text_to_send
                     prev_ends_with_space = text_to_send.endswith((" ", "\n", "\t")) if text_to_send else prev_ends_with_space

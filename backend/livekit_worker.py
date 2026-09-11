@@ -33,7 +33,7 @@ from livekit.agents import (
 )
 from livekit.plugins import deepgram, silero
 
-from core import persona
+from core import guardrails, persona
 from core.adapters import livekit as lk_tools
 
 logger = logging.getLogger("voice-agent-worker")
@@ -162,7 +162,7 @@ def _create_llm():
     # any conversational history: it printed 'search_web(...)' as literal text or
     # invented the answer outright (measured 0/2; temperature made no
     # difference). qwen3-next-80b scored 2/2 at comparable latency.
-    bedrock_model = os.getenv("BEDROCK_MODEL_ID", "qwen.qwen3-next-80b-a3b-instruct")
+    bedrock_model = os.getenv("BEDROCK_MODEL_ID", "deepseek.v3.2")
     xai_key = os.getenv("XAI_API_KEY")
     openai_key = os.getenv("OPENAI_API_KEY")
 
@@ -216,16 +216,52 @@ def _strip_markup(text: str) -> str:
     return _MARKDOWN_RE.sub("", text)
 
 
+async def _sanitize_stream(source, transform):
+    """Apply `transform` to a token stream, buffering so URLs survive chunking.
+
+    Tokens arrive a few characters at a time, so a URL is routinely split
+    across chunks and a regex over a single chunk would never match it. Text is
+    therefore held until a sentence boundary before being emitted, which is
+    also the granularity TTS wants.
+    """
+    buffer = ""
+    async for chunk in source:
+        buffer += chunk
+        # Flush on sentence end, but only when no partial URL is pending.
+        while True:
+            match = re.search(r"[.!?]\s", buffer)
+            if not match or "http" in buffer[match.end():]:
+                break
+            head, buffer = buffer[: match.end()], buffer[match.end():]
+            out = transform(head)
+            if out:
+                yield out
+
+    if buffer:
+        out = transform(buffer)
+        if out:
+            yield out
+
+
+def _clean_for_speech(text: str) -> str:
+    """Strip markdown symbols and any URL the agent was not given by a tool."""
+    return guardrails.strip_unapproved_urls(_strip_markup(text))
+
+
 class VoiceAgent(Agent):
     async def tts_node(self, text, model_settings):
-        async def cleaned():
-            async for chunk in text:
-                out = _strip_markup(chunk)
-                if out:
-                    yield out
-
-        async for frame in Agent.default.tts_node(self, cleaned(), model_settings):
+        async for frame in Agent.default.tts_node(
+            self, _sanitize_stream(text, _clean_for_speech), model_settings
+        ):
             yield frame
+
+    async def transcription_node(self, text, model_settings):
+        # What the visitor reads in the transcript. Markdown is fine here, but
+        # a fabricated link must not reach them in writing either.
+        async for chunk in Agent.default.transcription_node(
+            self, _sanitize_stream(text, guardrails.strip_unapproved_urls), model_settings
+        ):
+            yield chunk
 
 
 VOICE_AGENT_INSTRUCTIONS = persona.for_voice()
