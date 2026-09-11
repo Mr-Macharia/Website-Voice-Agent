@@ -57,6 +57,14 @@ EMBED_MODEL = _get("EMBED_MODEL", "BAAI/bge-base-en-v1.5")
 # model size), which silently creates a mis-sized pgvector column.
 EMBED_DIMENSIONS = _get_int("EMBED_DIMENSIONS", 768)
 
+# --- Chunking -------------------------------------------------------------
+# bge-base-en-v1.5 has a 512-token context (~2000 chars). Agno's default chunk
+# is 5000 chars with zero overlap, so most of every chunk would be silently
+# truncated before embedding and never retrievable. 1200 leaves headroom;
+# overlap keeps a fact that straddles a boundary findable from both sides.
+CHUNK_SIZE = _get_int("CHUNK_SIZE", 1200)
+CHUNK_OVERLAP = _get_int("CHUNK_OVERLAP", 150)
+
 # --- Retrieval ------------------------------------------------------------
 # Deliberately small: every retrieved chunk is prompt tokens, and on the voice
 # path retrieval happens before the first audio frame.

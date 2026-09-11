@@ -109,11 +109,33 @@ def get_embedder() -> Any:
 
 
 def get_vector_db(table_name: str = "knowledge_vectors") -> Any:
-    """pgvector store for the knowledge base."""
+    """pgvector store for the knowledge base.
+
+    Choices worth stating explicitly:
+
+    - search_type=hybrid. Pure vector search is weak on the queries this site
+      actually gets: proper nouns and acronyms ("Visiondrill", "JKUAT", "Agno",
+      "RAG") embed poorly but match exactly on keywords. Hybrid runs both and
+      fuses the scores, so "who is Visiondrill" hits the right chunk even when
+      the embedding is ambiguous.
+    - HNSW index over the default flat scan. At this corpus size a sequential
+      scan would honestly be fine, but the index is one line, keeps voice
+      latency flat as content grows, and costs nothing to add now.
+    - Cosine distance, matching how BGE models are trained.
+    """
     from agno.vectordb.pgvector import PgVector
+    from agno.vectordb.distance import Distance
+    from agno.vectordb.pgvector import HNSW
+    from agno.vectordb.search import SearchType
 
     return PgVector(
         table_name=table_name,
         db_engine=get_engine(),
         embedder=get_embedder(),
+        search_type=SearchType.hybrid,
+        distance=Distance.cosine,
+        vector_index=HNSW(m=16, ef_search=20, ef_construction=200),
+        # Weight vector vs keyword in the hybrid fusion. 0.6 leans on semantics
+        # while leaving keyword matching enough influence to win on exact names.
+        vector_score_weight=0.6,
     )

@@ -28,6 +28,7 @@ if str(BACKEND_DIR) not in sys.path:
 
 from core import config, db, knowledge  # noqa: E402
 
+
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger("ingest")
 
@@ -36,6 +37,18 @@ for _noisy in ("httpx", "httpcore", "urllib3", "h2", "hpack", "hyperframe", "bs4
     logging.getLogger(_noisy).setLevel(logging.WARNING)
 
 GITHUB_API = "https://api.github.com"
+
+
+def _chunking():
+    """Chunk to fit the embedding model's context, with overlap.
+
+    Agno's reader default (5000 chars, no overlap) exceeds bge-base-en-v1.5's
+    512-token window (~2000 chars), so most of every chunk would be silently
+    truncated before embedding and never retrievable.
+    """
+    from agno.knowledge.chunking.recursive import RecursiveChunking
+
+    return RecursiveChunking(chunk_size=config.CHUNK_SIZE, overlap=config.CHUNK_OVERLAP)
 
 
 def _load_flags(force: bool) -> dict:
@@ -94,9 +107,12 @@ def ingest_markdown(kb, force: bool) -> int:
             logger.info("  skip %-16s (template not filled in yet)", path.name)
             continue
 
+        from agno.knowledge.reader.markdown_reader import MarkdownReader
+
         kb.add_content(
             name=path.stem,
             path=str(path),
+            reader=MarkdownReader(chunking_strategy=_chunking()),
             metadata={"source": path.stem, "source_type": "markdown"},
             **_load_flags(force),
         )
@@ -158,9 +174,12 @@ def ingest_github(kb, force: bool) -> int:
                 except Exception as e:
                     logger.debug("no README for %s: %s", name, e)
 
+                from agno.knowledge.reader.text_reader import TextReader
+
                 kb.add_content(
                     name=f"github-{name}",
                     text_content="\n\n".join(p for p in parts if p),
+                    reader=TextReader(chunking_strategy=_chunking()),
                     metadata={
                         "source": f"github/{name}",
                         "source_type": "github",
@@ -192,7 +211,7 @@ def ingest_website(kb, force: bool) -> int:
         kb.add_content(
             name="website",
             url=config.SITE_URL,
-            reader=WebsiteReader(max_depth=2, max_links=25),
+            reader=WebsiteReader(max_depth=2, max_links=25, chunking_strategy=_chunking()),
             metadata={
                 "source": "website",
                 "source_type": "website",
