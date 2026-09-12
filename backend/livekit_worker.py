@@ -255,6 +255,21 @@ def prewarm(proc):
         activation_threshold=0.55,
     )
 
+    # Open the embeddings connection now, not on the visitor's first question.
+    # Without this the first retrieval pays a TCP connect plus TLS handshake —
+    # measured at 2.98s against a 0.45s steady-state median, which is dead air
+    # right at the start of a conversation.
+    try:
+        from core import config as _cfg
+
+        if _cfg.knowledge_available():
+            from core import db as _db
+
+            _db.get_embedder().get_embedding("warmup")
+            logger.info("Embeddings connection warmed")
+    except Exception as e:  # never block startup on a warmup
+        logger.warning("Could not warm embeddings connection: %s", e)
+
 
 server.setup_fnc = prewarm
 
@@ -337,14 +352,20 @@ async def entrypoint(ctx):
                 "resume_false_interruption": True,
                 "false_interruption_timeout": 2.0,
             },
-            # LLM starts on the final transcript before the turn is confirmed.
-            # preemptive_tts also starts synthesis early: the logs showed
-            # "flush audio emitter due to slow audio generation" on nearly every
-            # turn, meaning playback was catching up to the TTS stream. Costs
-            # some wasted synthesis on cancelled turns, buys smoother speech.
+            # LLM starts on the final transcript before the turn is confirmed —
+            # this part is pure win and stays on.
+            #
+            # preemptive_tts is OFF deliberately. It starts synthesis before the
+            # LLM has produced text, which helped when the only delay was
+            # Bedrock's time-to-first-token. Now that answers about Gichogu go
+            # through RAG, an embedding round trip sits inside that window: the
+            # live logs show `agent state -> speaking` at 22:34:58.773 while the
+            # embedding request was still in flight until 22:34:59.79, followed
+            # by three "flush audio emitter due to slow audio generation" lines.
+            # Speaking before there is anything to say is exactly the stutter.
             "preemptive_generation": {
                 "enabled": True,
-                "preemptive_tts": True,
+                "preemptive_tts": False,
             },
             # Cut in politely if a caller monologues, rather than buffering
             # indefinitely (voicemail greetings, someone reading a list).

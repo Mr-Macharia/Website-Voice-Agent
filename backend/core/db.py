@@ -105,8 +105,17 @@ def get_agno_db() -> Any:
     return _agno_db
 
 
+_embedder: Optional[Any] = None
+
+
 def get_embedder() -> Any:
     """DeepInfra embeddings through the OpenAI-compatible client.
+
+    Cached per process. The OpenAI client keeps a connection pool, but a fresh
+    embedder gets a fresh pool — and the live logs showed a full TCP connect
+    plus TLS handshake before every single retrieval, which is why the first
+    measured lookup took 2.98s against a 0.43s median. One embedder means the
+    keep-alive connection is actually reused.
 
     Two constraints pull in opposite directions:
 
@@ -125,15 +134,20 @@ def get_embedder() -> Any:
     EMBED_DIMENSIONS must therefore match the model's NATIVE size, not a size
     we are choosing — 768 for bge-base-en-v1.5, verified against the endpoint.
     """
+    global _embedder
+    if _embedder is not None:
+        return _embedder
+
     from agno.knowledge.embedder.openai import OpenAIEmbedder
 
-    return OpenAIEmbedder(
+    _embedder = OpenAIEmbedder(
         id=config.EMBED_MODEL,
         base_url=config.DEEPINFRA_BASE_URL,
         api_key=config.DEEPINFRA_API_KEY,
         dimensions=config.EMBED_DIMENSIONS,
         request_params={"dimensions": None},
     )
+    return _embedder
 
 
 def get_vector_db(table_name: str = "knowledge_vectors") -> Any:
