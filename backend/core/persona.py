@@ -272,12 +272,20 @@ def for_text() -> str:
     )
 
 
-def greeting_instructions() -> str:
-    """Instructions for the opening line of a voice call."""
-    return (
-        "Say hello to the person who just joined, in one short, relaxed "
-        f"sentence. You are {OWNER}'s AI assistant; they are a stranger whose "
-        "name you do NOT know, so never address them by any name. Warm and "
-        "low-key — let them know they can ask you about Gichogu's work. "
-        "No exclamation marks, no script."
-    )
+# The opening line, spoken verbatim.
+#
+# This used to be greeting_instructions(): a prompt handed to generate_reply so
+# the model could compose its own hello. That turn had every tool available, so
+# it ran a knowledge-base search before the visitor had said anything, and the
+# line it produced was unpredictable — live sessions caught it speaking invented
+# instruction text ("You may speak a little as though you were thinking
+# aloud...", "Let me start by searching for information about...") on top of the
+# actual greeting.
+#
+# A greeting never varies, so there is nothing for a model to add here. Fixed
+# text through session.say() removes the leak, the tool call and the latency in
+# one go. Keep it to one short spoken sentence, no exclamation marks, and never
+# address the visitor by name — the agent does not know who they are.
+GREETING = (
+    f"Hello. You're at {OWNER}'s site — you can ask about his work, or just chat."
+)

@@ -132,10 +132,26 @@ _META_LINE_RE = re.compile(
 )
 
 
+# A second, narrower leak shape: the model echoes a fragment of its own
+# turn-generation instructions directly in front of the real reply, with no
+# separator — observed live as "Write the exact words you will say.Hi there,
+# I'm Gichogu's assistant...". _META_LINE_RE cannot catch this: it matches and
+# drops a whole line, but here the real reply starts mid-line, right after the
+# leaked fragment. So this is stripped as a prefix, not a line.
+_META_PREFIX_RE = re.compile(
+    r"^\s*write\s+the\s+exact\s+words\s+you\s+will\s+say\.?\s*",
+    re.IGNORECASE,
+)
+
+
 def strip_meta_instructions(text: str) -> str:
     """Drop leaked system-prompt boilerplate from the START of a reply."""
     if not text:
         return text
+
+    text, prefix_stripped = _META_PREFIX_RE.subn("", text, count=1)
+    if prefix_stripped:
+        logger.warning("Stripped leaked meta-instruction prefix")
 
     lines = text.splitlines()
     kept, dropped = [], 0

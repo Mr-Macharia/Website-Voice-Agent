@@ -421,8 +421,20 @@ async def entrypoint(ctx):
         room_options=room_options,
     )
 
-    # Greet the user — triggers first TTS
-    await session.generate_reply(instructions=persona.greeting_instructions())
+    # Greet with fixed text, not generate_reply.
+    #
+    # generate_reply runs a full LLM turn with every tool available, so the
+    # opening line was model-generated: it fired search_about_owner before the
+    # visitor had asked anything (measured ~30s from "speaking" to the first
+    # audible words) and spoke instruction-shaped filler it invented from
+    # training priors — "You may speak a little as though you were thinking
+    # aloud...", "Let me start by searching for information about...". The
+    # guardrails strip what they recognise, but the real problem is asking a
+    # model to improvise a line that never varies.
+    #
+    # say() sends text straight to TTS: no inference, no tool selection,
+    # nothing to leak, and the greeting starts as soon as TTS connects.
+    await session.say(persona.GREETING, allow_interruptions=True)
     logger.info(f"Agent session started successfully in room: {ctx.room.name}")
 
 

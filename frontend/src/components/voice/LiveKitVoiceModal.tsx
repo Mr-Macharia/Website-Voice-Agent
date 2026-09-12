@@ -1623,11 +1623,18 @@ export const LiveKitVoiceModal: React.FC<LiveKitVoiceModalProps> = ({
     const fetchToken = async () => {
       setIsLoading(true)
 
+      // A unique room per session, not a shared literal. LiveKit only honors
+      // the token's agent-dispatch config when the room is newly created —
+      // reusing "voice-agent-room" meant reopening the modal shortly after
+      // closing it could land in the still-alive room from the previous
+      // session, silently skip dispatch, and leave the visitor with no agent.
+      const roomName = `voice-agent-room-${crypto.randomUUID()}`
+
       try {
-        let res = await fetch('/api/livekit/token?room=voice-agent-room')
+        let res = await fetch(`/api/livekit/token?room=${roomName}`)
         if (!res.ok) {
           res = await fetch(
-            `${selectedEndpoint}/api/livekit/token?room=voice-agent-room`
+            `${selectedEndpoint}/api/livekit/token?room=${roomName}`
           )
         }
 
