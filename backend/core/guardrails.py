@@ -144,6 +144,56 @@ _META_PREFIX_RE = re.compile(
 )
 
 
+# A third leak shape, and the one that actually broke the audio: the model
+# announces the tool call before making it — "I'll look up what Gichogu works
+# on and what exactly he's done." — then stops, runs the tool, and starts a
+# SECOND utterance with the real answer.
+#
+# Measured live: agent -> speaking at 07:59:28.153, preamble delivered by
+# 07:59:31.991, speaking -> thinking at 07:59:31.992, back to speaking at
+# 07:59:33.727. That is a ~1.7s dead stop mid-answer and a fresh TTS segment
+# after it, heard as an unnatural pause and a change in tone. Because the gap
+# is the tool round trip, it appears to track "generation speed", which is why
+# it was mistaken for a TTS pacing fault.
+#
+# persona.py already forbids this twice (the "Do not narrate what you are about
+# to do" rule names "I'll check his background" almost verbatim, and the
+# conversation rules repeat "Never say 'let me check'"). The model does it
+# anyway — the same reason the URL rule lives here rather than in the prompt.
+#
+# Deliberately narrow: anchored to the start of the reply and limited to a
+# single leading sentence, so a genuine answer that happens to contain "I'll
+# look into that for you" mid-paragraph is untouched. If the preamble is the
+# whole message, the result is empty and no audio segment is emitted at all,
+# which removes the stop/restart instead of moving it.
+_TOOL_PREAMBLE_RE = re.compile(
+    r"""(?ix)
+    ^\s*
+    (?:ok(?:ay)?[,.]?\s*|sure[,.]?\s*|alright[,.]?\s*)?   # optional lead-in
+    (?:
+        i(?:'|’)?ll \s+ (?:go\s+)?(?:look(?!\s+forward)|check|search|find|see|dig|pull)
+      | i \s+ will \s+ (?:go\s+)?(?:look(?!\s+forward)|check|search|find|see|dig|pull)
+      | let \s+ me \s+ (?:go\s+)?(?:look|check|search|find|see|dig|pull)
+      | (?:one\s+moment|hold\s+on|just\s+a\s+(?:moment|sec(?:ond)?))
+      | i(?:'|’)?m \s+ (?:going\s+to|gonna) \s+ (?:look|check|search|find|see)
+      | i \s+ (?:can|could) \s+ (?:look|check|search) \s+ that \s+ up
+    )
+    \b[^.!?\n]*        # rest of that sentence only
+    [.!?]*\s*           # its terminator, if any
+    """,
+)
+
+
+def strip_tool_preamble(text: str) -> str:
+    """Drop a leading "I'll look that up" announcement before a tool call."""
+    if not text:
+        return text
+    cleaned, n = _TOOL_PREAMBLE_RE.subn("", text, count=1)
+    if n:
+        logger.warning("Stripped spoken tool preamble")
+    return cleaned.lstrip()
+
+
 def strip_meta_instructions(text: str) -> str:
     """Drop leaked system-prompt boilerplate from the START of a reply."""
     if not text:
@@ -170,4 +220,6 @@ def strip_meta_instructions(text: str) -> str:
 
 def clean_output(text: str) -> str:
     """Everything that must never reach a visitor, in one call."""
-    return strip_unapproved_urls(strip_control_tokens(strip_meta_instructions(text)))
+    return strip_unapproved_urls(
+        strip_control_tokens(strip_tool_preamble(strip_meta_instructions(text)))
+    )
