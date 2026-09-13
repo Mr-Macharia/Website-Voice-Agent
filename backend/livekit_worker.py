@@ -49,17 +49,32 @@ _quiet_noisy_loggers()
 # ---------------------------------------------------------------------------
 # Playback buffer.
 #
-# Deepgram's Flux TTS synthesizes slower than realtime from this region:
-# measured medians of ~0.77x for flux-brooke-en (roughly 4.9s of compute for
-# 3.0s of speech). LiveKit's RoomIO hardcodes its outbound AudioSource to
-# queue_size_ms=200 (the rtc SDK's own default is 1000), so a 200ms cushion has
-# to absorb synthesis running ~23% behind playback. It cannot, so the buffer
-# drains mid-sentence and the audio stutters — the audible "glitch", and the
-# cause of the constant "flush audio emitter due to slow audio generation".
+# RoomIO hardcodes its outbound AudioSource to queue_size_ms=200 (the rtc SDK's
+# own default is 1000). This patches that call site so the cushion can be tuned;
+# it is left at 1000ms, which is where it has always run in practice.
 #
-# Raising the cushion trades a little extra latency before Brooke starts
-# speaking for speech that doesn't break up. There is no public setting for
-# this, so patch the constructor default. Revisit if RoomIO exposes one.
+# Two things are worth recording so this is not re-litigated:
+#
+# 1. The original comment justified 1000ms by claiming Flux synthesizes at
+#    ~0.77x realtime. That is not what it does. Measured directly against
+#    flux-brooke-en at 24kHz, it is FASTER than realtime no matter how quickly
+#    text is fed:
+#
+#      all words at once   18.24s audio / 13.39s wall = 1.36x  (max gap 0.19s)
+#      word every 50ms     17.36s audio / 11.62s wall = 1.49x  (max gap 0.24s)
+#      word every 120ms    22.16s audio / 16.71s wall = 1.33x  (max gap 0.24s)
+#
+#    So the stated reason for widening the buffer does not hold.
+#
+# 2. Dropping it to 200ms was tried and changed nothing audible: the
+#    "flush audio emitter due to slow audio generation" DEBUG lines appeared at
+#    the same ~305ms cadence and the same count at both 200ms and 1000ms. Those
+#    lines are the emitter's flush timer arming and re-arming on a streaming
+#    TTS; they are not by themselves evidence of a fault, and chasing them was
+#    a dead end.
+#
+# The value is therefore left alone at 1000ms rather than changed on a theory
+# that measurement did not support. LK_AUDIO_QUEUE_MS overrides it.
 # ---------------------------------------------------------------------------
 def _widen_playback_buffer() -> None:
     queue_ms = int(os.getenv("LK_AUDIO_QUEUE_MS", "1000"))
@@ -78,7 +93,7 @@ def _widen_playback_buffer() -> None:
                 super().__init__(sample_rate, num_channels, queue_size_ms=queue_size_ms, **kwargs)
 
         room_output.rtc.AudioSource = BufferedAudioSource  # type: ignore[attr-defined]
-        logger.info("Playback buffer set to %dms (was 200ms)", queue_ms)
+        logger.info("Playback buffer queue_size_ms=%d", queue_ms)
     except Exception as e:  # pragma: no cover - never block startup on this
         logger.warning("Could not widen playback buffer: %s", e)
 
@@ -187,26 +202,43 @@ def _strip_markup(text: str) -> str:
     return _MARKDOWN_RE.sub("", text)
 
 
-async def _sanitize_stream(source, transform):
-    """Apply `transform` to a token stream, buffering so URLs survive chunking.
+# Flush on whitespace, not on sentence punctuation.
+#
+# This buffer exists only so a URL split across token chunks can still be
+# matched by the guardrail regex. It used to hold text until `[.!?]\s`, which
+# meant a whole sentence was withheld for however long the LLM took to generate
+# it, then delivered to TTS in one burst. The gap between bursts was model
+# latency played back as silence — speech paced by generation rather than by
+# prosody, audible as a glitch mid-answer.
+#
+# Deepgram TTSv2 is a streaming TTS: it holds a websocket and sends each word as
+# its own `Speak` frame (livekit/plugins/deepgram/tts_v2.py), synthesizing
+# continuously. It wants words as soon as they exist. Because a URL never
+# contains whitespace, withholding only the unterminated trailing token is
+# enough to keep the guardrail whole, so that is the boundary now. Do not
+# restore the sentence gate; it starves the TTS.
+_TRAILING_WS_RE = re.compile(r"\s(?=\S*$)")
 
-    Tokens arrive a few characters at a time, so a URL is routinely split
-    across chunks and a regex over a single chunk would never match it. Text is
-    therefore held until a sentence boundary before being emitted, which is
-    also the granularity TTS wants.
+
+async def _sanitize_stream(source, transform):
+    """Apply `transform` to a token stream, holding back only a partial word.
+
+    Tokens arrive a few characters at a time, so a URL is routinely split across
+    chunks and a regex over a single chunk would never match it. Everything up
+    to the last whitespace is safe to emit; the unterminated tail is retained
+    until more text arrives or the stream ends.
     """
     buffer = ""
     async for chunk in source:
         buffer += chunk
-        # Flush on sentence end, but only when no partial URL is pending.
-        while True:
-            match = re.search(r"[.!?]\s", buffer)
-            if not match or "http" in buffer[match.end():]:
-                break
-            head, buffer = buffer[: match.end()], buffer[match.end():]
-            out = transform(head)
-            if out:
-                yield out
+        # Split at the last whitespace: the tail may still be a partial URL.
+        match = _TRAILING_WS_RE.search(buffer)
+        if not match:
+            continue
+        head, buffer = buffer[: match.end()], buffer[match.end():]
+        out = transform(head)
+        if out:
+            yield out
 
     if buffer:
         out = transform(buffer)
@@ -294,8 +326,16 @@ async def entrypoint(ctx):
     # behaviour we are trying to get away from.
     #
     # eot_threshold: confidence required before Flux declares end-of-turn.
-    #   0.7 is the default; higher = waits longer / more certain the caller
-    #   actually finished, which is what stops mid-sentence chopping.
+    #   This ran at 0.8 with eot_timeout_ms=4000 — both above the SDK defaults
+    #   (0.7 / 3000) — to stop mid-sentence chopping. It overshot: when speech
+    #   did not clear the 0.8 bar the turn never closed, and each new burst
+    #   restarted the wait. Measured from a live session: one turn spoken in
+    #   four bursts over 07:50:24-07:50:51 produced a SINGLE merged transcript
+    #   at 07:50:54, ~30s after the caller started; other turns logged
+    #   transcript_delay of 5.88s and 2.76s against 0.003s when it worked.
+    #   That is the "my words arrive late, then all at once" failure.
+    #   Back to the documented defaults, which endpoint on time; the eager
+    #   threshold below still guards against clipping mid-sentence.
     # eot_timeout_ms: hard ceiling before Flux closes a turn regardless.
     # LiveKit does NOT pass an encoding here — it feeds Flux PCM itself.
     # eager_eot_threshold fires an early "EagerEndOfTurn" so the LLM can start
@@ -306,8 +346,8 @@ async def entrypoint(ctx):
         model="flux-general-en",
         sample_rate=16000,
         eager_eot_threshold=0.6,
-        eot_threshold=0.8,
-        eot_timeout_ms=4000,
+        eot_threshold=0.7,
+        eot_timeout_ms=3000,
     )
 
     # Flux TTS v2 — streaming linear16/24000 (matches server.py ws/voice)
