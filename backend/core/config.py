@@ -47,7 +47,26 @@ GITHUB_USERNAME = _get("GITHUB_USERNAME", "Mr-Macharia")
 SITE_URL = _get("SITE_URL", "https://gichogumacharia.tech")
 
 # --- Database -------------------------------------------------------------
-DATABASE_URL = _get("DATABASE_URL")
+def _normalize_db_url(url: str | None) -> str | None:
+    """Force the psycopg3 driver onto a Postgres URL.
+
+    Managed hosts (Heroku, Render, Railway) hand out `postgres://`, which
+    SQLAlchemy cannot parse at all, and `postgresql://` selects psycopg2, which
+    this project does not install. Both must become `postgresql+psycopg://`.
+
+    Normalizing here rather than at the call site matters because these hosts
+    rotate the credential without warning: anything that edited the stored
+    value by hand would silently revert on the next rotation.
+    """
+    if not url:
+        return url
+    for prefix in ("postgres://", "postgresql://"):
+        if url.startswith(prefix):
+            return "postgresql+psycopg://" + url[len(prefix):]
+    return url
+
+
+DATABASE_URL = _normalize_db_url(_get("DATABASE_URL"))
 
 # --- Embeddings (DeepInfra, OpenAI-compatible) ----------------------------
 DEEPINFRA_API_KEY = _get("DEEPINFRA_API_KEY")
