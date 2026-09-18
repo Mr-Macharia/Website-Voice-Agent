@@ -21,8 +21,7 @@ const ChatInput = () => {
   const isStreaming = useStore((state) => state.isStreaming)
 
   const activeAgentName =
-    agents.find((a) => a.id === selectedAgent)?.name ||
-    'Realtime Voice Assistant'
+    agents.find((a) => a.id === selectedAgent)?.name || 'Clyde'
 
   const handleSubmit = async () => {
     if (!inputMessage.trim()) return
@@ -70,12 +69,12 @@ const ChatInput = () => {
             />
           </div>
 
-          {/* LiveKit / Deepgram Voice Assistant Button */}
+          {/* Voice session button */}
           <Button
             onClick={() => setIsVoiceOpen(true)}
             type="button"
             size="icon"
-            title="Start Realtime Voice Session (Deepgram Flux)"
+            title="Talk to Clyde"
             className="size-10 shrink-0 rounded-xl border border-[#e85d04]/40 bg-gradient-to-tr from-[#e85d04]/20 to-[#f48c06]/20 p-0 text-[#f48c06] shadow-md shadow-orange-950/40 transition-all hover:border-[#e85d04] hover:bg-[#e85d04]/30 hover:text-white"
           >
             <Mic className="size-4 animate-pulse" />
@@ -113,7 +112,7 @@ const ChatInput = () => {
           </div>
           <div className="flex hidden items-center gap-1 text-[#f48c06]/80 sm:flex">
             <Sparkles className="size-2.5" />
-            <span>Deepgram Flux & Agno AgentOS</span>
+            <span>Ask Clyde anything</span>
           </div>
         </div>
       </div>

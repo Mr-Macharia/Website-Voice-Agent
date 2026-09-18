@@ -46,7 +46,7 @@ interface Turn {
 export const AssemblyAIVoiceModal: React.FC<AssemblyAIVoiceModalProps> = ({
   isOpen,
   onClose,
-  agentName = 'Voice Assistant'
+  agentName = 'Clyde'
 }) => {
   const { selectedEndpoint, setMessages } = useStore()
 
@@ -176,7 +176,7 @@ export const AssemblyAIVoiceModal: React.FC<AssemblyAIVoiceModalProps> = ({
         className="max-h-[92vh] max-w-3xl overflow-hidden rounded-3xl border border-white/10 bg-[#0a0f1e] p-0 text-white shadow-2xl ring-1 ring-white/10 backdrop-blur-2xl sm:max-w-[780px] lg:max-w-[820px]"
       >
         <DialogHeader className="sr-only">
-          <DialogTitle>Realtime Voice Assistant</DialogTitle>
+          <DialogTitle>Clyde — portfolio voice agent</DialogTitle>
           <DialogDescription>
             Interactive voice conversation session
           </DialogDescription>
@@ -201,7 +201,7 @@ export const AssemblyAIVoiceModal: React.FC<AssemblyAIVoiceModalProps> = ({
                 <div className="flex items-center gap-2">
                   <Radio className="size-4 text-sky-400" />
                   <span className="font-mono text-xs font-medium text-zinc-200">
-                    AssemblyAI Voice Agent
+                    Portfolio voice agent
                   </span>
                 </div>
               </div>
@@ -232,7 +232,7 @@ export const AssemblyAIVoiceModal: React.FC<AssemblyAIVoiceModalProps> = ({
                 <VoiceVisualizer
                   state={visualState}
                   barCount={15}
-                  engineLabel="AssemblyAI"
+                  engineLabel="Live"
                 />
               </div>
 
@@ -284,7 +284,7 @@ export const AssemblyAIVoiceModal: React.FC<AssemblyAIVoiceModalProps> = ({
               onToggleMute={toggleMute}
               onDisconnect={handleClose}
               agentName={agentName}
-              mode="AssemblyAI Voice Agent"
+              mode="Portfolio voice agent"
             />
           </div>
         )}

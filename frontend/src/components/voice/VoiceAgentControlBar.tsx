@@ -18,8 +18,8 @@ export const VoiceAgentControlBar: React.FC<VoiceAgentControlBarProps> = ({
   onToggleMute,
   onDisconnect,
   isConnected,
-  agentName = 'Realtime Voice Assistant',
-  mode = 'Deepgram Flux TTS'
+  agentName = 'Clyde',
+  mode = 'Portfolio voice agent'
 }) => {
   const isLiveKit = mode.toLowerCase().includes('livekit')
 

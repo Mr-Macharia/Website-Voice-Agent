@@ -110,10 +110,10 @@ def _get_voice_agent():
 
     _voice_agent = Agent(
         id="voice-agent",
-        name="Realtime Voice Assistant",
+        name="Clyde",
         model=llm,
         tools=[SiteTools()],
-        description=f"Voice assistant for {core_config.OWNER_NAME}'s website.",
+        description=f"Clyde on the voice channel, for {core_config.OWNER_NAME}'s website.",
         instructions=[persona.for_voice()],
         markdown=False,
         db=db,

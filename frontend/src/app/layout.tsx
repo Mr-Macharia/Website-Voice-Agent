@@ -4,9 +4,9 @@ import { Toaster } from '@/components/ui/sonner'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Gichogu Macharia | Realtime Voice & AI Agent OS',
+  title: 'Gichogu Macharia | A Portfolio You Can Talk To',
   description:
-    'Building intelligent systems, realtime voice agents with Deepgram Flux, and multi-agent workflows powered by Agno and Grok.'
+    'A portfolio you can hold a conversation with. Ask Clyde about my work, my projects and my experience, or book a time — by text or by voice.'
 }
 
 export default function RootLayout({

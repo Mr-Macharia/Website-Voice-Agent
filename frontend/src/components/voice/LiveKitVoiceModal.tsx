@@ -316,7 +316,7 @@ const DirectVoiceSession: React.FC<{
   const [copied, setCopied] = useState(false)
   const [history, setHistory] = useState<ConversationTurn[]>([])
   const [statusMessage, setStatusMessage] = useState(
-    'Connecting to Deepgram Voice Bridge...'
+    'Connecting...'
   )
 
   const wsRef = useRef<WebSocket | null>(null)
@@ -663,7 +663,7 @@ const DirectVoiceSession: React.FC<{
       turnActiveRef.current = true
       armTurnWatchdog()
       setVoiceState('thinking')
-      setStatusMessage('Processing speech (Deepgram Flux)...')
+      setStatusMessage('Processing speech...')
       setAgentText('')
       currentAgentTextRef.current = ''
       // Reset jitter first-chunk flag for next TTS turn
@@ -735,8 +735,8 @@ const DirectVoiceSession: React.FC<{
     ws.onopen = () => {
       if (!isMounted) return
       setVoiceState('listening')
-      setStatusMessage('Voice Bridge Active • Speak naturally')
-      toast.success('Connected to Deepgram Voice Bridge')
+      setStatusMessage('Listening • Speak naturally')
+      toast.success('Voice session connected')
     }
 
     ws.onmessage = async (event) => {
@@ -1323,10 +1323,10 @@ const DirectVoiceSession: React.FC<{
           <div className="flex items-center gap-2">
             <Zap className="size-4 text-[#f48c06]" />
             <span className="font-mono text-xs font-medium text-zinc-200">
-              Deepgram Voice Bridge
+              Portfolio voice agent
             </span>
             <span className="rounded-full border border-[#f48c06]/20 bg-[#f48c06]/10 px-2.5 py-0.5 font-mono text-[10px] text-[#faa307]">
-              Nova-3 STT • Flux TTS
+              Speech to speech
             </span>
           </div>
         </div>
@@ -1438,7 +1438,7 @@ const DirectVoiceSession: React.FC<{
               state={voiceState}
               volume={voiceState === 'speaking' ? 0.65 : micVolume}
               barCount={15}
-              engineLabel="Deepgram Flux"
+              engineLabel="Live"
             />
           </div>
 
@@ -1586,7 +1586,7 @@ const DirectVoiceSession: React.FC<{
         onToggleMute={() => setIsMuted(!isMuted)}
         onDisconnect={onDisconnect}
         agentName={agentName}
-        mode="Deepgram Flux TTS"
+        mode="LiveKit voice"
       />
     </div>
   )
@@ -1595,7 +1595,7 @@ const DirectVoiceSession: React.FC<{
 export const LiveKitVoiceModal: React.FC<LiveKitVoiceModalProps> = ({
   isOpen,
   onClose,
-  agentName = 'Realtime Voice Assistant'
+  agentName = 'Clyde'
 }) => {
   const [token, setToken] = useState<string>('')
   const [wsUrl, setWsUrl] = useState<string>('')
@@ -1686,7 +1686,7 @@ export const LiveKitVoiceModal: React.FC<LiveKitVoiceModalProps> = ({
         className="max-h-[92vh] max-w-3xl overflow-hidden rounded-3xl border border-white/10 bg-[#0a0f1e] p-0 text-white shadow-2xl ring-1 ring-white/10 backdrop-blur-2xl sm:max-w-[780px] lg:max-w-[820px]"
       >
         <DialogHeader className="sr-only">
-          <DialogTitle>Realtime Voice Assistant</DialogTitle>
+          <DialogTitle>Clyde — portfolio voice agent</DialogTitle>
           <DialogDescription>
             Interactive voice conversation session
           </DialogDescription>

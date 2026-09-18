@@ -12,7 +12,7 @@ export default function Home() {
     <Suspense
       fallback={
         <div className="flex h-screen items-center justify-center font-mono text-sm text-zinc-400">
-          Loading Agent OS...
+          Loading...
         </div>
       }
     >

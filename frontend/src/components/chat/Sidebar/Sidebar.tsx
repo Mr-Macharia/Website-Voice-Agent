@@ -32,7 +32,7 @@ const SidebarHeader = () => (
         Gichogu Macharia
       </span>
       <span className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-[#f48c06]">
-        <Sparkles className="inline size-2.5" /> AI Agent OS
+        <Sparkles className="inline size-2.5" /> AI/ML Engineer
       </span>
     </div>
   </div>
@@ -149,7 +149,7 @@ const Endpoint = () => {
   return (
     <div className="flex flex-col items-start gap-2">
       <div className="font-mono text-[11px] uppercase tracking-wider text-zinc-400">
-        AgentOS
+        Backend
       </div>
       {isEditing ? (
         <div className="flex w-full items-center gap-1">
@@ -259,8 +259,7 @@ const Sidebar = ({
   const [agentId] = useQueryState('agent')
   const [teamId] = useQueryState('team')
 
-  const activeAgentName =
-    agents.find((a) => a.id === agentId)?.name || 'Realtime Voice Assistant'
+  const activeAgentName = agents.find((a) => a.id === agentId)?.name || 'Clyde'
 
   useEffect(() => {
     setIsMounted(true)

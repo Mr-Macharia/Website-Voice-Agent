@@ -94,10 +94,14 @@ _agent_tools = [_site_tools, *_gmail.get_tools()]
 # rules (no markdown, short sentences, spoken dates).
 voice_agent = Agent(
     id="voice-agent",
-    name="Realtime Voice Assistant",
+    # Same name as text_agent on purpose: one assistant, two channels. The id
+    # is what distinguishes them, and persona.py's shared identity says "You
+    # are Clyde" — a second display name would put the split-identity problem
+    # that module exists to prevent back into the agent picker.
+    name="Clyde",
     model=llm_model,
     tools=_agent_tools,
-    description=f"Voice assistant for {core_config.OWNER_NAME}'s website.",
+    description=f"Clyde on the voice channel, for {core_config.OWNER_NAME}'s website.",
     instructions=[VOICE_AGENT_SYSTEM_PROMPT],
     markdown=False,
     db=db,
@@ -114,10 +118,10 @@ voice_agent = Agent(
 # extra_data.references, which the frontend already renders as citations.
 text_agent = Agent(
     id="site-agent",
-    name=f"Ask about {core_config.OWNER_NAME}",
+    name="Clyde",
     model=llm_model,
     tools=_agent_tools,
-    description=f"Answers questions about {core_config.OWNER_NAME} and books meetings.",
+    description=f"Clyde answers questions about {core_config.OWNER_NAME} and books meetings.",
     instructions=[TEXT_AGENT_SYSTEM_PROMPT],
     markdown=True,
     db=db,
