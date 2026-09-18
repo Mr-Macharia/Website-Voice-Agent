@@ -89,6 +89,91 @@ def authorized(auth_header: str | None) -> bool:
     return token == config.LLM_PROXY_SECRET
 
 
+# DeepSeek V3.2 is a reasoning model: it thinks in the open, wrapping its chain
+# of thought in <think>...</think> inside the normal content stream, and also
+# exposes it as a separate `reasoning_content` delta on some providers.
+#
+# None of that is speech. Streamed into TTS it becomes the agent narrating its
+# own planning to the visitor — heard live as "let me check his background",
+# "If you can add more input while they wait for results, do so as usual", and
+# a bare "</think>" spoken aloud.
+#
+# This is the structural fix. The guardrails in core/guardrails.py pattern-match
+# the *content* of leaked reasoning, which is a losing game because the model
+# writes new prose each time; this removes the channel instead.
+_THINK_OPEN = re.compile(r"<\s*think\s*>", re.IGNORECASE)
+_THINK_CLOSE = re.compile(r"<\s*/\s*think\s*>", re.IGNORECASE)
+
+
+class _ThinkFilter:
+    """Drops <think>...</think> spans from a streamed reply.
+
+    Tags can be split across chunks ("<thi" + "nk>"), so a short tail is held
+    back whenever the buffer ends in something that might become a tag.
+    """
+
+    # Long enough for "</think>" plus whitespace variants.
+    _MAX_TAG = 12
+
+    def __init__(self) -> None:
+        self._buf = ""
+        self._thinking = False
+
+    def feed(self, text: str) -> str:
+        if not text:
+            return ""
+        self._buf += text
+        out = []
+
+        while self._buf:
+            if self._thinking:
+                m = _THINK_CLOSE.search(self._buf)
+                if not m:
+                    # Stay inside the think block; keep only a possible partial tag.
+                    self._buf = self._buf[-self._MAX_TAG:]
+                    return "".join(out)
+                self._buf = self._buf[m.end():]
+                self._thinking = False
+                continue
+
+            m_open = _THINK_OPEN.search(self._buf)
+            # A close tag with no opener: the reasoning began before the first
+            # content delta, so everything up to it was thinking. Heard live as
+            # a bare "</think>" spoken to the visitor.
+            m_close = _THINK_CLOSE.search(self._buf)
+            if m_close and (not m_open or m_close.start() < m_open.start()):
+                out.clear()
+                self._buf = self._buf[m_close.end():]
+                continue
+            if not m_open:
+                break
+            out.append(self._buf[: m_open.start()])
+            self._buf = self._buf[m_open.end():]
+            self._thinking = True
+
+        if not self._thinking:
+            # Hold back a tail that could still become an opening tag.
+            cut = len(self._buf)
+            for i in range(1, min(self._MAX_TAG, len(self._buf)) + 1):
+                tail = self._buf[-i:].lower().replace(" ", "")
+                if "<think>".startswith(tail) or "</think>".startswith(tail):
+                    cut = len(self._buf) - i
+                    break
+            out.append(self._buf[:cut])
+            self._buf = self._buf[cut:]
+
+        return "".join(out)
+
+    def finish(self) -> str:
+        """Flush anything still buffered, unless it is unterminated reasoning."""
+        if self._thinking:
+            # An unclosed <think> means the whole tail was reasoning.
+            self._buf = ""
+            return ""
+        tail, self._buf = self._buf, ""
+        return tail
+
+
 class _ReplyCleaner:
     """Applies guardrails across a streamed reply, not fragment by fragment.
 
@@ -189,8 +274,9 @@ async def stream_completion(payload: dict) -> AsyncIterator[bytes]:
 
                     logger.info("Voice reply streaming from %s", provider["name"])
                     cleaner = _ReplyCleaner()
+                    think = _ThinkFilter()
                     async for line in response.aiter_lines():
-                        out = _transform_sse_line(line, cleaner)
+                        out = _transform_sse_line(line, cleaner, think)
                         if out is not None:
                             yield out
                     return
@@ -204,7 +290,9 @@ async def stream_completion(payload: dict) -> AsyncIterator[bytes]:
     yield _error_chunk("I'm having trouble thinking right now. Could you try that again?")
 
 
-def _transform_sse_line(line: str, cleaner: "_ReplyCleaner") -> bytes | None:
+def _transform_sse_line(
+    line: str, cleaner: "_ReplyCleaner", think: "_ThinkFilter"
+) -> bytes | None:
     """Pass an SSE line through, cleaning any reply text inside it.
 
     Returns None for lines to skip. Anything unparseable is forwarded
@@ -220,7 +308,7 @@ def _transform_sse_line(line: str, cleaner: "_ReplyCleaner") -> bytes | None:
     if data == "[DONE]":
         # Release anything still held back, or a reply shorter than the head
         # buffer would never be spoken at all.
-        tail = cleaner.finish()
+        tail = cleaner.feed(think.finish()) + cleaner.finish()
         if tail:
             chunk = {"choices": [{"index": 0, "delta": {"content": tail},
                                   "finish_reason": None}]}
@@ -231,11 +319,15 @@ def _transform_sse_line(line: str, cleaner: "_ReplyCleaner") -> bytes | None:
         chunk = json.loads(data)
         for choice in chunk.get("choices", []):
             delta = choice.get("delta", {})
+            # Some providers stream reasoning in its own field. It is never
+            # speech, so drop it outright rather than forwarding it.
+            delta.pop("reasoning_content", None)
+            delta.pop("reasoning", None)
             if isinstance(delta.get("content"), str):
-                delta["content"] = cleaner.feed(delta["content"])
+                delta["content"] = cleaner.feed(think.feed(delta["content"]))
             # A finished reply must release the buffer even without [DONE].
             if choice.get("finish_reason"):
-                tail = cleaner.finish()
+                tail = cleaner.feed(think.finish()) + cleaner.finish()
                 if tail:
                     delta["content"] = (delta.get("content") or "") + tail
         return f"data: {json.dumps(chunk)}\n\n".encode()
