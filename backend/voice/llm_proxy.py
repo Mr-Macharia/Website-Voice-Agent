@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import AsyncIterator
 
 import httpx
@@ -88,18 +89,59 @@ def authorized(auth_header: str | None) -> bool:
     return token == config.LLM_PROXY_SECRET
 
 
-def _clean_delta(text: str) -> str:
-    """Apply guardrails to one streamed fragment.
+class _ReplyCleaner:
+    """Applies guardrails across a streamed reply, not fragment by fragment.
 
-    clean_output works on whole text, but arrives here in token-sized pieces.
-    Control tokens and tool preambles are what actually matter mid-stream and
-    are safe to strip per-fragment; URL rewriting needs more context than a
-    fragment has, so it is left to the fragment that happens to contain it.
-    A fragment that cleans to empty is dropped rather than sent as "".
+    guardrails.clean_output is anchored to the START of a reply: it strips a
+    leaked instruction line, a leaked prefix, or an "I'll look that up"
+    preamble only when they lead. A streaming proxy never sees a reply — it
+    sees token-sized fragments — so running those anchored rules against each
+    fragment matches almost nothing, and a preamble split across two chunks
+    survives regardless.
+
+    Observed live before this existed: the agent spoke its own reasoning
+    ("I should look up what Gichogu Macharia actually does first") and then
+    read a paragraph of its system prompt aloud, verbatim.
+
+    So the head of each reply is buffered until there is enough text to judge —
+    a sentence, or _HEAD_CHARS — cleaned once, and released. Everything after
+    the head streams straight through, because these leaks only ever lead.
+
+    Buffering the head costs a little time-to-first-audio. It is bounded by
+    _HEAD_CHARS and only applies to the first fragment or two, which is a fair
+    trade against speaking the prompt out loud.
     """
-    if not text:
-        return text
-    return guardrails.strip_control_tokens(text)
+
+    # Enough to contain a leading sentence; a leaked preamble is far shorter.
+    _HEAD_CHARS = 240
+
+    def __init__(self) -> None:
+        self._head = ""
+        self._released = False
+
+    def feed(self, text: str) -> str:
+        """Return the text safe to emit now, which may be empty."""
+        if self._released:
+            return text
+        if not text:
+            return ""
+
+        self._head += text
+        # Wait for a sentence boundary or enough characters to judge the lead.
+        if len(self._head) < self._HEAD_CHARS and not re.search(r"[.!?\n]", self._head):
+            return ""
+        return self._flush()
+
+    def finish(self) -> str:
+        """Release whatever is still buffered at the end of the reply."""
+        if self._released:
+            return ""
+        return self._flush()
+
+    def _flush(self) -> str:
+        self._released = True
+        head, self._head = self._head, ""
+        return guardrails.clean_output(head)
 
 
 async def stream_completion(payload: dict) -> AsyncIterator[bytes]:
@@ -146,8 +188,9 @@ async def stream_completion(payload: dict) -> AsyncIterator[bytes]:
                         continue  # try the next provider
 
                     logger.info("Voice reply streaming from %s", provider["name"])
+                    cleaner = _ReplyCleaner()
                     async for line in response.aiter_lines():
-                        out = _transform_sse_line(line)
+                        out = _transform_sse_line(line, cleaner)
                         if out is not None:
                             yield out
                     return
@@ -161,7 +204,7 @@ async def stream_completion(payload: dict) -> AsyncIterator[bytes]:
     yield _error_chunk("I'm having trouble thinking right now. Could you try that again?")
 
 
-def _transform_sse_line(line: str) -> bytes | None:
+def _transform_sse_line(line: str, cleaner: "_ReplyCleaner") -> bytes | None:
     """Pass an SSE line through, cleaning any reply text inside it.
 
     Returns None for lines to skip. Anything unparseable is forwarded
@@ -175,6 +218,13 @@ def _transform_sse_line(line: str) -> bytes | None:
 
     data = line[6:].strip()
     if data == "[DONE]":
+        # Release anything still held back, or a reply shorter than the head
+        # buffer would never be spoken at all.
+        tail = cleaner.finish()
+        if tail:
+            chunk = {"choices": [{"index": 0, "delta": {"content": tail},
+                                  "finish_reason": None}]}
+            return f"data: {json.dumps(chunk)}\n\ndata: [DONE]\n\n".encode()
         return b"data: [DONE]\n\n"
 
     try:
@@ -182,7 +232,12 @@ def _transform_sse_line(line: str) -> bytes | None:
         for choice in chunk.get("choices", []):
             delta = choice.get("delta", {})
             if isinstance(delta.get("content"), str):
-                delta["content"] = _clean_delta(delta["content"])
+                delta["content"] = cleaner.feed(delta["content"])
+            # A finished reply must release the buffer even without [DONE].
+            if choice.get("finish_reason"):
+                tail = cleaner.finish()
+                if tail:
+                    delta["content"] = (delta.get("content") or "") + tail
         return f"data: {json.dumps(chunk)}\n\n".encode()
     except (json.JSONDecodeError, TypeError, AttributeError):
         return (line + "\n\n").encode()
