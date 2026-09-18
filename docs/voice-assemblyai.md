@@ -49,12 +49,25 @@ browser VAD, and two SDK monkey-patches. Don't reintroduce them.
 
 ## Configuration
 
-Everything is set **inline per session** — there is no stored agent and no
-`agent_id`. `GET /api/voice/token` returns `{ token, session }`, and the
-browser forwards the session object verbatim. `core/persona.py` stays the
-single source of truth, and changing the persona is an ordinary deploy.
+The agent is **stored** on AssemblyAI, not configured inline. That is forced,
+not chosen: the API rejects a custom `llm` on `session.update` —
 
-Built in `backend/voice/session_config.py`.
+    BYO LLM config is not allowed on session.update;
+    define it on a stored agent via POST /v1/agents
+
+and `agent_id` is mutually exclusive with every inline field, so the persona,
+voice, tools and turn detection all live on the stored agent. The browser sends
+only the id.
+
+`core/persona.py` is still the single source of truth, but **editing it is no
+longer enough** — the prompt lives on AssemblyAI's servers, so re-provision:
+
+```bash
+cd backend && uv run python scripts/provision_agent.py --update
+```
+
+Built in `backend/voice/session_config.py`, published by
+`backend/scripts/provision_agent.py`.
 
 ### Turn detection is deliberately almost unconfigured
 
@@ -70,8 +83,23 @@ knobs essentially never.
 
 AssemblyAI accepts exactly **one** `llm` entry, so without a proxy the provider
 fallback chain would disappear. The proxy is where it survives: AssemblyAI sees
-one stable URL, and we choose what sits behind it (Bedrock → OpenAI → xAI, the
-order carried over from the LiveKit worker).
+one stable URL, and we choose what sits behind it (deepseek-flash → grok-4.6 →
+deepseek.v3.2). That order comes from a measured protocol probe, not
+preference — see the docstring in `_providers()`.
+
+**Model choice is a tool-calling question, not a latency one.** The
+Bedrock-hosted `deepseek.v3.2` could not emit tool calls at all: given a tool
+it clearly should use it returned zero calls and answered from nothing, and
+handed a completed tool result it emitted the malformed control token
+`<|DSML|function_calls`. Live, that surfaced as the agent reading AssemblyAI's
+own orchestration instructions aloud to visitors. Probe any replacement on two
+things before switching: does it call a tool when it should, and does it turn a
+tool result into clean speech?
+
+`deepseek-flash` needs one quirk — see `_apply_provider_quirks`. It is a
+thinking model that returns `reasoning_content` on every tool call and then
+rejects any follow-up omitting it. AssemblyAI sends plain OpenAI-format turns,
+so the proxy fills the field in.
 
 It also carries `guardrails.clean_output`. That used to run before TTS; now
 that AssemblyAI speaks the model's tokens directly, the proxy is the only place
@@ -105,6 +133,13 @@ visitor can interrupt at any moment. Browser echo cancellation
 second layer costs more accuracy than the noise did. Tune `voice_focus`
 instead.
 
+**Playback gain must stay at 1.0.** The browser's echo canceller models the
+signal it sends to the speakers; amplifying that signal afterwards means what
+returns through the mic no longer matches the model, the residual swamps the
+visitor, and barge-in stops working — measured as having to repeat a question
+three times. Loudness belongs in `output.volume` on the stored agent, where it
+does not break cancellation.
+
 **If the agent ever interrupts itself on a phone** — audio breaking right after
 the first reply — that is its own speaker leaking past echo cancellation into
 the mic. Raise `interruption_delay` server-side first. Muting the mic during
@@ -123,9 +158,14 @@ Two rules carried from the LiveKit adapter:
 - An optional tool must never take down the session — a single bad Gmail tool
   once killed an entire voice session rather than just itself.
 
-Results are queued and sent only when the agent is idle (`reply.done`). On an
-interruption, pending results are **discarded**: they answer a question nobody
-is waiting for any more.
+Results are queued and sent unless a reply is actively streaming
+(`reply.started`). `input.speech.started` counts as idle — the visitor
+interrupted, so the agent is listening and waiting on that result. Treating it
+as busy was a deadlock: after any barge-in the result sat in the browser and
+the agent never answered at all.
+
+On an interruption, pending results are **discarded**: they answer a question
+nobody is waiting for any more.
 
 Tool failures come back as readable text telling the agent what to say next,
 never as exceptions — a raised error mid-conversation leaves the visitor
@@ -161,3 +201,11 @@ Config vars: `ASSEMBLYAI_API_KEY`, `LLM_PROXY_SECRET`, one of
 
 Then set `LLM_PROXY_URL` to `https://<app>.herokuapp.com/api/llm` — note the
 path, not the bare host: AssemblyAI appends `/chat/completions`.
+
+**Region matters.** The proxy is called once per turn and the tool relay again
+per tool, so the round trip is paid two or more times per reply. From Nairobi
+the EU region measured ~0.72s against ~1.27s for US-East. Heroku cannot move an
+app between regions — it means a new app.
+
+Current deployment: `gichogu-voice-eu` (EU), agent
+`agent_f3981a8d50954289813c4e77b0dcfd29`.

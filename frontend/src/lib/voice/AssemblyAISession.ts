@@ -40,8 +40,21 @@ export interface VoiceSessionCallbacks {
 const WS_URL = 'wss://agents.assemblyai.com/v1/ws'
 /** The Voice Agent API speaks PCM16 mono at 24 kHz, both directions. */
 const SAMPLE_RATE = 24000
-/** The agent's native output is quiet; this lifts it without clipping speech. */
-const OUTPUT_GAIN = 2.2
+/**
+ * Playback gain for the agent's voice.
+ *
+ * Deliberately 1.0. The kaytie reference uses 2.2 to lift a quiet TTS output,
+ * but it also half-duplexes on mobile, so it never pays the cost: the browser's
+ * echo canceller models the signal it sends to the speakers, and amplifying
+ * that signal afterwards means what returns through the microphone no longer
+ * matches the model. The residual echo then swamps the visitor's voice and
+ * barge-in stops working — measured live as having to repeat a question three
+ * times before the agent would stop talking.
+ *
+ * Loudness belongs server-side instead, where it does not break cancellation:
+ * output.volume on the stored agent (0-100).
+ */
+const OUTPUT_GAIN = 1.0
 
 export class AssemblyAISession {
   private ws: WebSocket | null = null
@@ -368,8 +381,14 @@ export class AssemblyAISession {
     }
 
     this.pendingToolResults.push({ callId, result })
-    // Send now only if no turn is in flight; otherwise wait for reply.done.
-    if (this.lastEvent === 'reply.done' || this.lastEvent === null) {
+    // Send now if no reply is in flight. `input.speech.started` counts as idle:
+    // the visitor interrupted, so the agent is listening rather than speaking,
+    // and it is waiting on this result to answer the new question.
+    //
+    // Treating it as busy was a deadlock — after any barge-in, lastEvent stayed
+    // 'input.speech.started' until some later reply.done, so the result sat in
+    // the browser and the agent never answered at all.
+    if (this.lastEvent !== 'reply.started') {
       this.flushToolResults()
     }
   }

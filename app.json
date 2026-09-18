@@ -1,0 +1,30 @@
+{
+  "name": "voice-agent-backend",
+  "description": "FastAPI backend: Agno AgentOS text chat, plus the token, tool-relay and LLM-proxy endpoints the AssemblyAI voice agent needs.",
+  "repository": "https://github.com/Mr-Macharia/Website-Voice-Agent",
+  "buildpacks": [
+    { "url": "https://github.com/timanovsky/subdir-heroku-buildpack" },
+    { "url": "heroku/python" }
+  ],
+  "env": {
+    "PROJECT_PATH": {
+      "description": "Deploy the backend/ subdirectory. The repo root holds a package.json for the frontend, which would otherwise be detected instead, and a stale pyproject.toml missing psycopg, pgvector, composio and httpx.",
+      "value": "backend"
+    },
+    "ASSEMBLYAI_API_KEY": {
+      "description": "AssemblyAI key for the Voice Agent API. Never reaches the browser."
+    },
+    "LLM_PROXY_SECRET": {
+      "description": "Shared secret sent as the llm[].api_key and checked on arrival, so the public proxy endpoint isn't open. Any long random string.",
+      "generator": "secret"
+    },
+    "BEDROCK_API_KEY": { "required": false },
+    "BEDROCK_BASE_URL": { "required": false },
+    "BEDROCK_MODEL_ID": { "required": false },
+    "OPENAI_API_KEY": { "required": false },
+    "XAI_API_KEY": { "required": false },
+    "DATABASE_URL": { "required": false },
+    "DEEPINFRA_API_KEY": { "required": false },
+    "COMPOSIO_API_KEY": { "required": false }
+  }
+}

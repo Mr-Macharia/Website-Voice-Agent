@@ -144,6 +144,110 @@ _META_PREFIX_RE = re.compile(
 )
 
 
+# A fifth shape, and the one the head-only cleaner could not reach: the model
+# emits invented instruction prose in the MIDDLE of a reply, then continues the
+# real answer — observed live as:
+#   "If the user is asleep, offline, disinterested, etc., act accordingly.
+#    Gichogu is an AI and machine learning specialist..."
+#   "There is no need to ever narrate that you looked something up.a lead in
+#    student mentorship programs..."
+# Neither sentence exists in persona.py. The model is not quoting its prompt,
+# it is generating new text in the prompt's register — a 2,500-token wall of
+# second-person imperatives bleeding into the output.
+#
+# These are matched anywhere in the reply, unlike _META_LINE_RE, because the
+# shape itself is disqualifying: the agent is addressing "the user" in the
+# third person, or telling itself what to do. A real spoken reply talks TO the
+# visitor, never ABOUT them as "the user", and never issues itself orders.
+#
+# Kept tight for that reason — each alternative needs a subject that no genuine
+# answer about a person's career would use.
+_SELF_INSTRUCTION_RE = re.compile(
+    r"""(?ix)
+    (?:^|(?<=[.!?\n]))\s*
+    (?:
+        # "If the user is asleep, offline, ..., act accordingly." — a rule
+        # about the visitor, not speech addressed to them. Requires a verb
+        # after the subject so "If the user guide interests you" is untouched.
+        if \s+ the \s+ (?:user|visitor) \s+
+        (?:is|are|was|were|has|have|does|do|seems?|wants?|asks?|starts?|stops?)
+        \b
+        (?: [^.!?\n] | (?<=\betc)\. | (?<=\be\.g)\. | (?<=\bi\.e)\. )*
+      | # "There is no need to ever narrate ..." / "Do not narrate ..."
+        (?:there\s+is\s+no\s+need\s+to|you\s+(?:should|must|need\s+to)\s+never|
+           (?:do\s+not|don't|never)) \s+
+        (?:ever\s+)?
+        (?:narrate|mention\s+that\s+you|state\s+that\s+you|say\s+that\s+you|
+           reveal|disclose|announce)
+        \s+ [^.!?\n]*
+      | # "Answer only from what the tool returned." — tool-usage rules.
+        (?:answer|respond|reply) \s+ only \s+ (?:from|with|using) \s+ [^.!?\n]*
+      | # "Use capture_lead when ..." — naming our own tools aloud.
+        (?:use|call|invoke) \s+ (?:the\s+)?
+        (?:search_about_owner|search_web|capture_lead|get_booking_link)
+        \b [^.!?\n]*
+    )
+    [.!?]* \s*
+    """,
+)
+
+
+def strip_self_instructions(text: str) -> str:
+    """Drop invented instruction prose from anywhere in a reply.
+
+    Unlike the other guards this is not anchored to the start, because the
+    model emits these mid-reply and then carries on with the real answer.
+    """
+    if not text:
+        return text
+    cleaned, n = _SELF_INSTRUCTION_RE.subn(" ", text)
+    if n:
+        logger.warning("Stripped %d self-instruction fragment(s)", n)
+        # The strip can leave a doubled space or an answer resuming mid-word.
+        cleaned = re.sub(r"[ \t]{2,}", " ", cleaned).strip()
+    return cleaned
+
+
+# A fourth shape, seen on the AssemblyAI path: the model narrates its own
+# retrieval step as a connector and then gives the real answer in the SAME
+# sentence — "Based on that, his work involves building AI systems", "The user
+# asked X. So based on the last call, he is an engineer."
+#
+# These must be stripped as a PREFIX, not as a sentence: _TOOL_PREAMBLE_RE
+# consumes to the next terminator, which here would swallow the answer too.
+# Restating the question back to the visitor ("The user asked...") is the same
+# defect — it is the model talking about the conversation instead of having it.
+_REASONING_PREFIX_RE = re.compile(
+    r"""(?ix)
+    ^\s*
+    (?:
+        # Restating the question back, often with the quote included.
+        the \s+ (?:user|visitor) \s+ asked\b
+        [^.!?\n]*                       # rest of the clause
+        (?: [\"'\u201c\u201d] [^\"'\u201c\u201d]* [\"'\u201c\u201d] )?   # a quoted question
+        [^.!?\n]* [.!?]* \s*
+    )?
+    (?:
+        (?:so\s+|and\s+)? based \s+ on \s+
+        (?:that|this|the\s+(?:last|previous|above)(?:\s+\w+)?)
+        \s* [,:]? \s*
+      | (?:so|therefore) \s* [,:] \s*
+    )
+    """,
+)
+
+
+def _recapitalize(text: str) -> str:
+    """Upper-case the first letter after a prefix strip.
+
+    Removing a leading connector leaves the real answer starting mid-sentence
+    ("his work involves..."), which reads and speaks as a fragment.
+    """
+    if text and text[0].islower():
+        return text[0].upper() + text[1:]
+    return text
+
+
 # A third leak shape, and the one that actually broke the audio: the model
 # announces the tool call before making it — "I'll look up what Gichogu works
 # on and what exactly he's done." — then stops, runs the tool, and starts a
@@ -177,6 +281,15 @@ _TOOL_PREAMBLE_RE = re.compile(
       | (?:one\s+moment|hold\s+on|just\s+a\s+(?:moment|sec(?:ond)?))
       | i(?:'|’)?m \s+ (?:going\s+to|gonna) \s+ (?:look|check|search|find|see)
       | i \s+ (?:can|could) \s+ (?:look|check|search) \s+ that \s+ up
+      # Reasoning narrated in the first person rather than announced as an
+      # action. Heard live on the AssemblyAI path: "I should look up what
+      # Gichogu Macharia actually does for work first." The model is thinking
+      # out loud before its tool call, which is the same defect as the
+      # announcements above and produces the same stop/restart in the audio.
+      | i \s+ (?:should|need\s+to|have\s+to|must) \s+
+        (?:go\s+)?(?:look|check|search|find|see|dig|pull|consult|verify|confirm)
+      | (?:let(?:'|’)?s|i(?:'|’)?d\s+better) \s+
+        (?:go\s+)?(?:look|check|search|find|see)
     )
     \b[^.!?\n]*        # rest of that sentence only
     [.!?]*\s*           # its terminator, if any
@@ -191,6 +304,7 @@ def strip_tool_preamble(text: str) -> str:
     cleaned, n = _TOOL_PREAMBLE_RE.subn("", text, count=1)
     if n:
         logger.warning("Stripped spoken tool preamble")
+        return _recapitalize(cleaned.lstrip())
     return cleaned.lstrip()
 
 
@@ -202,6 +316,11 @@ def strip_meta_instructions(text: str) -> str:
     text, prefix_stripped = _META_PREFIX_RE.subn("", text, count=1)
     if prefix_stripped:
         logger.warning("Stripped leaked meta-instruction prefix")
+
+    text, reasoning_stripped = _REASONING_PREFIX_RE.subn("", text, count=1)
+    if reasoning_stripped:
+        logger.warning("Stripped leaked reasoning prefix")
+        text = _recapitalize(text.lstrip())
 
     lines = text.splitlines()
     kept, dropped = [], 0
@@ -221,5 +340,7 @@ def strip_meta_instructions(text: str) -> str:
 def clean_output(text: str) -> str:
     """Everything that must never reach a visitor, in one call."""
     return strip_unapproved_urls(
-        strip_control_tokens(strip_tool_preamble(strip_meta_instructions(text)))
+        strip_control_tokens(
+            strip_self_instructions(strip_tool_preamble(strip_meta_instructions(text)))
+        )
     )

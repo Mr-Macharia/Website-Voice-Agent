@@ -20,8 +20,10 @@ localhost is rejected. Local development points at the deployed instance.
 
 from __future__ import annotations
 
+import copy
 import json
 import logging
+import re
 from typing import AsyncIterator
 
 import httpx
@@ -38,20 +40,60 @@ _TIMEOUT = httpx.Timeout(connect=5.0, read=60.0, write=10.0, pool=5.0)
 def _providers() -> list[dict]:
     """Upstreams in priority order, best first.
 
-    Order and model choices carry over from livekit_worker._create_llm(),
-    including its hard-won note: nemotron-nano-3-30b could not reliably emit
-    tool calls once the chat had any history — it printed 'search_web(...)' as
-    literal text or invented the answer outright. Don't substitute models here
-    without testing tool calls with conversation history present.
+    Order is set by a measured protocol probe, not by preference. Each model
+    is checked on two things the Voice Agent API depends on: does it emit a
+    tool call when it clearly should, and does it turn a completed tool result
+    into clean speech?
+
+      - deepseek-flash (V4.1-Flash, DeepSeek's own API) leads. It passes both
+        tests and needs the reasoning_content quirk; see
+        _apply_provider_quirks.
+      - grok-4.6 passes both with no quirk and is the fallback.
+
+    On latency the two are close. Warm first-token over three runs each:
+    deepseek-flash 0.50s / 0.50s / 0.89s, grok-4.6 0.57s / 0.59s / 0.64s.
+    An earlier 2.7s grok reading was a cold-start outlier, not its steady
+    state. So this order is not a speed decision, and one slow measurement is
+    not a reason to re-order them.
+
+    The Bedrock-hosted deepseek.v3.2 is a different generation and fails:
+
+        given a tool it clearly should use it emitted ZERO tool
+        calls and answered from nothing. Handed a completed tool result, it
+        replied with the malformed control token "<|DSML|function_calls"
+        instead of an answer. Live, it spoke AssemblyAI's own orchestration
+        instructions aloud to visitors ("Do not comment on the tool's
+        existence...", "Use the reply box to speak to the person...") — the
+        model failing the protocol and spilling the rules instead of following
+        them.
+
+    This is the same class of defect the LiveKit worker recorded for
+    nemotron-nano-3-30b, which printed 'search_web(...)' as literal text.
+    Tool calling with conversation history is the thing to test before
+    changing a model here; latency is secondary.
+
+    Bedrock stays last so voice still answers if both other providers are
+    down, accepting that its replies will be worse than silence is.
     """
     out: list[dict] = []
 
-    if config.BEDROCK_API_KEY:
+    if config.DEEPSEEK_API_KEY:
         out.append({
-            "name": "bedrock",
-            "base_url": config.BEDROCK_BASE_URL.rstrip("/"),
-            "api_key": config.BEDROCK_API_KEY,
-            "model": config.BEDROCK_MODEL_ID or "deepseek.v3.2",
+            "name": "deepseek",
+            "base_url": config.DEEPSEEK_BASE_URL.rstrip("/"),
+            "api_key": config.DEEPSEEK_API_KEY,
+            "model": config.DEEPSEEK_MODEL_ID or "deepseek-flash",
+            # V4 is a thinking model with a non-standard requirement, see
+            # _apply_provider_quirks.
+            "needs_reasoning_echo": True,
+        })
+
+    if config.XAI_API_KEY:
+        out.append({
+            "name": "xai",
+            "base_url": "https://api.x.ai/v1",
+            "api_key": config.XAI_API_KEY,
+            "model": config.XAI_MODEL_ID or "grok-4.6",
         })
 
     if config.OPENAI_API_KEY:
@@ -62,15 +104,58 @@ def _providers() -> list[dict]:
             "model": "gpt-4o-mini",
         })
 
-    if config.XAI_API_KEY:
+    if config.BEDROCK_API_KEY:
         out.append({
-            "name": "xai",
-            "base_url": "https://api.x.ai/v1",
-            "api_key": config.XAI_API_KEY,
-            "model": "grok-4.20-0309-non-reasoning",
+            "name": "bedrock",
+            "base_url": config.BEDROCK_BASE_URL.rstrip("/"),
+            "api_key": config.BEDROCK_API_KEY,
+            "model": config.BEDROCK_MODEL_ID or "deepseek.v3.2",
         })
 
     return out
+
+
+def _apply_provider_quirks(body: dict, provider: dict) -> dict:
+    """Adjust the request for a provider that deviates from the OpenAI shape.
+
+    DeepSeek V4 (deepseek-flash, deepseek-v4-pro) is a thinking model: every
+    tool call it returns carries a `reasoning_content` field, and the API then
+    REJECTS any follow-up whose assistant turn omits it —
+
+        The `reasoning_content` in the thinking mode must be passed back to
+        the API.
+
+    That is a DeepSeek extension, not part of the OpenAI schema. AssemblyAI's
+    orchestrator builds the message list and sends plain OpenAI-format turns,
+    so it never echoes the field and every post-tool-call turn 400s. The visitor
+    hears nothing at all.
+
+    An empty string satisfies the check (verified against the live API), so the
+    proxy fills it in where it is missing. We do not reconstruct the model's
+    actual reasoning: it is not ours to store, it would have to survive a round
+    trip through AssemblyAI, and it is never spoken.
+    """
+    if not provider.get("needs_reasoning_echo"):
+        return body
+
+    messages = body.get("messages")
+    if not isinstance(messages, list):
+        return body
+
+    patched = False
+    for msg in messages:
+        if (
+            isinstance(msg, dict)
+            and msg.get("role") == "assistant"
+            and msg.get("tool_calls")
+            and "reasoning_content" not in msg
+        ):
+            msg["reasoning_content"] = ""
+            patched = True
+
+    if patched:
+        logger.debug("Added reasoning_content for %s", provider["name"])
+    return body
 
 
 def authorized(auth_header: str | None) -> bool:
@@ -88,18 +173,144 @@ def authorized(auth_header: str | None) -> bool:
     return token == config.LLM_PROXY_SECRET
 
 
-def _clean_delta(text: str) -> str:
-    """Apply guardrails to one streamed fragment.
+# DeepSeek V3.2 is a reasoning model: it thinks in the open, wrapping its chain
+# of thought in <think>...</think> inside the normal content stream, and also
+# exposes it as a separate `reasoning_content` delta on some providers.
+#
+# None of that is speech. Streamed into TTS it becomes the agent narrating its
+# own planning to the visitor — heard live as "let me check his background",
+# "If you can add more input while they wait for results, do so as usual", and
+# a bare "</think>" spoken aloud.
+#
+# This is the structural fix. The guardrails in core/guardrails.py pattern-match
+# the *content* of leaked reasoning, which is a losing game because the model
+# writes new prose each time; this removes the channel instead.
+_THINK_OPEN = re.compile(r"<\s*think\s*>", re.IGNORECASE)
+_THINK_CLOSE = re.compile(r"<\s*/\s*think\s*>", re.IGNORECASE)
 
-    clean_output works on whole text, but arrives here in token-sized pieces.
-    Control tokens and tool preambles are what actually matter mid-stream and
-    are safe to strip per-fragment; URL rewriting needs more context than a
-    fragment has, so it is left to the fragment that happens to contain it.
-    A fragment that cleans to empty is dropped rather than sent as "".
+
+class _ThinkFilter:
+    """Drops <think>...</think> spans from a streamed reply.
+
+    Tags can be split across chunks ("<thi" + "nk>"), so a short tail is held
+    back whenever the buffer ends in something that might become a tag.
     """
-    if not text:
-        return text
-    return guardrails.strip_control_tokens(text)
+
+    # Long enough for "</think>" plus whitespace variants.
+    _MAX_TAG = 12
+
+    def __init__(self) -> None:
+        self._buf = ""
+        self._thinking = False
+
+    def feed(self, text: str) -> str:
+        if not text:
+            return ""
+        self._buf += text
+        out = []
+
+        while self._buf:
+            if self._thinking:
+                m = _THINK_CLOSE.search(self._buf)
+                if not m:
+                    # Stay inside the think block; keep only a possible partial tag.
+                    self._buf = self._buf[-self._MAX_TAG:]
+                    return "".join(out)
+                self._buf = self._buf[m.end():]
+                self._thinking = False
+                continue
+
+            m_open = _THINK_OPEN.search(self._buf)
+            # A close tag with no opener: the reasoning began before the first
+            # content delta, so everything up to it was thinking. Heard live as
+            # a bare "</think>" spoken to the visitor.
+            m_close = _THINK_CLOSE.search(self._buf)
+            if m_close and (not m_open or m_close.start() < m_open.start()):
+                out.clear()
+                self._buf = self._buf[m_close.end():]
+                continue
+            if not m_open:
+                break
+            out.append(self._buf[: m_open.start()])
+            self._buf = self._buf[m_open.end():]
+            self._thinking = True
+
+        if not self._thinking:
+            # Hold back a tail that could still become an opening tag.
+            cut = len(self._buf)
+            for i in range(1, min(self._MAX_TAG, len(self._buf)) + 1):
+                tail = self._buf[-i:].lower().replace(" ", "")
+                if "<think>".startswith(tail) or "</think>".startswith(tail):
+                    cut = len(self._buf) - i
+                    break
+            out.append(self._buf[:cut])
+            self._buf = self._buf[cut:]
+
+        return "".join(out)
+
+    def finish(self) -> str:
+        """Flush anything still buffered, unless it is unterminated reasoning."""
+        if self._thinking:
+            # An unclosed <think> means the whole tail was reasoning.
+            self._buf = ""
+            return ""
+        tail, self._buf = self._buf, ""
+        return tail
+
+
+class _ReplyCleaner:
+    """Applies guardrails across a streamed reply, not fragment by fragment.
+
+    guardrails.clean_output is anchored to the START of a reply: it strips a
+    leaked instruction line, a leaked prefix, or an "I'll look that up"
+    preamble only when they lead. A streaming proxy never sees a reply — it
+    sees token-sized fragments — so running those anchored rules against each
+    fragment matches almost nothing, and a preamble split across two chunks
+    survives regardless.
+
+    Observed live before this existed: the agent spoke its own reasoning
+    ("I should look up what Gichogu Macharia actually does first") and then
+    read a paragraph of its system prompt aloud, verbatim.
+
+    So the head of each reply is buffered until there is enough text to judge —
+    a sentence, or _HEAD_CHARS — cleaned once, and released. Everything after
+    the head streams straight through, because these leaks only ever lead.
+
+    Buffering the head costs a little time-to-first-audio. It is bounded by
+    _HEAD_CHARS and only applies to the first fragment or two, which is a fair
+    trade against speaking the prompt out loud.
+    """
+
+    # Enough to contain a leading sentence; a leaked preamble is far shorter.
+    _HEAD_CHARS = 240
+
+    def __init__(self) -> None:
+        self._head = ""
+        self._released = False
+
+    def feed(self, text: str) -> str:
+        """Return the text safe to emit now, which may be empty."""
+        if self._released:
+            return text
+        if not text:
+            return ""
+
+        self._head += text
+        # Wait for a sentence boundary or enough characters to judge the lead.
+        if len(self._head) < self._HEAD_CHARS and not re.search(r"[.!?\n]", self._head):
+            return ""
+        return self._flush()
+
+    def finish(self) -> str:
+        """Release whatever is still buffered at the end of the reply."""
+        if self._released:
+            return ""
+        return self._flush()
+
+    def _flush(self) -> str:
+        self._released = True
+        head, self._head = self._head, ""
+        return guardrails.clean_output(head)
 
 
 async def stream_completion(payload: dict) -> AsyncIterator[bytes]:
@@ -119,8 +330,9 @@ async def stream_completion(payload: dict) -> AsyncIterator[bytes]:
     last_error: Exception | None = None
 
     for provider in providers:
-        body = dict(payload)
+        body = copy.deepcopy(payload)
         body["model"] = provider["model"]
+        body = _apply_provider_quirks(body, provider)
         # Voice needs tokens as they are generated, never a single blob at the
         # end — buffering turns reply latency into whole-turn latency.
         body["stream"] = True
@@ -146,8 +358,10 @@ async def stream_completion(payload: dict) -> AsyncIterator[bytes]:
                         continue  # try the next provider
 
                     logger.info("Voice reply streaming from %s", provider["name"])
+                    cleaner = _ReplyCleaner()
+                    think = _ThinkFilter()
                     async for line in response.aiter_lines():
-                        out = _transform_sse_line(line)
+                        out = _transform_sse_line(line, cleaner, think)
                         if out is not None:
                             yield out
                     return
@@ -161,7 +375,9 @@ async def stream_completion(payload: dict) -> AsyncIterator[bytes]:
     yield _error_chunk("I'm having trouble thinking right now. Could you try that again?")
 
 
-def _transform_sse_line(line: str) -> bytes | None:
+def _transform_sse_line(
+    line: str, cleaner: "_ReplyCleaner", think: "_ThinkFilter"
+) -> bytes | None:
     """Pass an SSE line through, cleaning any reply text inside it.
 
     Returns None for lines to skip. Anything unparseable is forwarded
@@ -175,14 +391,30 @@ def _transform_sse_line(line: str) -> bytes | None:
 
     data = line[6:].strip()
     if data == "[DONE]":
+        # Release anything still held back, or a reply shorter than the head
+        # buffer would never be spoken at all.
+        tail = cleaner.feed(think.finish()) + cleaner.finish()
+        if tail:
+            chunk = {"choices": [{"index": 0, "delta": {"content": tail},
+                                  "finish_reason": None}]}
+            return f"data: {json.dumps(chunk)}\n\ndata: [DONE]\n\n".encode()
         return b"data: [DONE]\n\n"
 
     try:
         chunk = json.loads(data)
         for choice in chunk.get("choices", []):
             delta = choice.get("delta", {})
+            # Some providers stream reasoning in its own field. It is never
+            # speech, so drop it outright rather than forwarding it.
+            delta.pop("reasoning_content", None)
+            delta.pop("reasoning", None)
             if isinstance(delta.get("content"), str):
-                delta["content"] = _clean_delta(delta["content"])
+                delta["content"] = cleaner.feed(think.feed(delta["content"]))
+            # A finished reply must release the buffer even without [DONE].
+            if choice.get("finish_reason"):
+                tail = cleaner.feed(think.finish()) + cleaner.finish()
+                if tail:
+                    delta["content"] = (delta.get("content") or "") + tail
         return f"data: {json.dumps(chunk)}\n\n".encode()
     except (json.JSONDecodeError, TypeError, AttributeError):
         return (line + "\n\n").encode()

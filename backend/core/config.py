@@ -47,7 +47,26 @@ GITHUB_USERNAME = _get("GITHUB_USERNAME", "Mr-Macharia")
 SITE_URL = _get("SITE_URL", "https://gichogumacharia.tech")
 
 # --- Database -------------------------------------------------------------
-DATABASE_URL = _get("DATABASE_URL")
+def _normalize_db_url(url: str | None) -> str | None:
+    """Force the psycopg3 driver onto a Postgres URL.
+
+    Managed hosts (Heroku, Render, Railway) hand out `postgres://`, which
+    SQLAlchemy cannot parse at all, and `postgresql://` selects psycopg2, which
+    this project does not install. Both must become `postgresql+psycopg://`.
+
+    Normalizing here rather than at the call site matters because these hosts
+    rotate the credential without warning: anything that edited the stored
+    value by hand would silently revert on the next rotation.
+    """
+    if not url:
+        return url
+    for prefix in ("postgres://", "postgresql://"):
+        if url.startswith(prefix):
+            return "postgresql+psycopg://" + url[len(prefix):]
+    return url
+
+
+DATABASE_URL = _normalize_db_url(_get("DATABASE_URL"))
 
 # --- Embeddings (DeepInfra, OpenAI-compatible) ----------------------------
 DEEPINFRA_API_KEY = _get("DEEPINFRA_API_KEY")
@@ -99,7 +118,17 @@ LEAD_SMTP_USER = _get("LEAD_SMTP_USER")
 LEAD_SMTP_APP_PASSWORD = _get("LEAD_SMTP_APP_PASSWORD")
 
 # --- LLM (unchanged from existing behaviour) ------------------------------
+# DeepSeek's own API (not the Bedrock-hosted deepseek.v3.2, which could not
+# emit tool calls — see voice/llm_proxy.py). deepseek-flash is V4.1-Flash, a
+# different generation, and does advertise tool-call support.
+DEEPSEEK_API_KEY = _get("DEEPSEEK_API_KEY")
+DEEPSEEK_BASE_URL = _get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+DEEPSEEK_MODEL_ID = _get("DEEPSEEK_MODEL_ID", "deepseek-flash")
+
 XAI_API_KEY = _get("XAI_API_KEY")
+# grok-4.6 is the voice default: it calls tools reliably with conversation
+# history present, which deepseek.v3.2 does not (see voice/llm_proxy.py).
+XAI_MODEL_ID = _get("XAI_MODEL_ID", "grok-4.6")
 OPENAI_API_KEY = _get("OPENAI_API_KEY")
 BEDROCK_BASE_URL = _get("BEDROCK_BASE_URL", "https://bedrock-mantle.us-east-1.api.aws/v1")
 BEDROCK_API_KEY = _get("BEDROCK_API_KEY")
@@ -113,6 +142,17 @@ BEDROCK_MODEL_ID = _get("BEDROCK_MODEL_ID", "deepseek.v3.2")
 # The browser never sees ASSEMBLYAI_API_KEY. It calls /api/voice/token, which
 # mints a short-lived single-use token server-side.
 ASSEMBLYAI_API_KEY = _get("ASSEMBLYAI_API_KEY")
+# A stored agent, created by scripts/provision_agent.py.
+#
+# This is not the shape originally planned. Configuring everything inline per
+# session would have avoided a provisioning step, but the API rejects a custom
+# `llm` on session.update — "BYO LLM config is not allowed on session.update;
+# define it on a stored agent via POST /v1/agents". Since keeping our own LLM
+# is the point of the migration, the agent has to be stored.
+#
+# agent_id is mutually exclusive with every inline field, so the prompt, voice,
+# tools and turn detection all live on the stored agent too.
+ASSEMBLYAI_AGENT_ID = _get("ASSEMBLYAI_AGENT_ID")
 # Voice IDs are exact strings and are rejected at session.update if wrong.
 # Current catalog: alba, eve, george, jane, jean, mary, michael (US);
 # anna, charles, paul, vera (UK). See core/persona.py for the tone this matches.
@@ -123,6 +163,14 @@ ASSEMBLYAI_VOICE_FOCUS = _get("ASSEMBLYAI_VOICE_FOCUS", "near-field")
 # min_latency | balanced | max_accuracy. Presets how long the model waits in
 # silence before ending a turn; the cleanest single turn-taking knob.
 ASSEMBLYAI_TRANSCRIPTION_MODE = _get("ASSEMBLYAI_TRANSCRIPTION_MODE", "balanced")
+# How long the visitor must speak before they can cut the agent off, in ms
+# (0-1000). The API default follows transcription_mode and is 500 on balanced,
+# which tested as sluggish — you had to talk over the agent for noticeably too
+# long before it stopped. 100 makes barge-in feel immediate.
+#
+# Raising it is the first thing to try if the agent starts interrupting itself,
+# or if short back-channels ("mm-hmm", "right") cut it off.
+ASSEMBLYAI_INTERRUPTION_DELAY = _get_int("ASSEMBLYAI_INTERRUPTION_DELAY", 100)
 
 # AssemblyAI calls our LLM proxy server-to-server, so the URL must be public
 # HTTPS — localhost is rejected. Local dev points at the deployed instance.
@@ -162,7 +210,12 @@ def voice_available() -> bool:
     AssemblyAI accepts only one llm entry. Without a public proxy URL the
     agent would connect and then be unable to say anything.
     """
-    return bool(ASSEMBLYAI_API_KEY and LLM_PROXY_URL and llm_available())
+    return bool(
+        ASSEMBLYAI_API_KEY
+        and ASSEMBLYAI_AGENT_ID
+        and LLM_PROXY_URL
+        and llm_available()
+    )
 
 
 def llm_available() -> bool:
@@ -182,6 +235,7 @@ def missing_for(feature: str) -> list[str]:
         "gmail": {"COMPOSIO_API_KEY": COMPOSIO_API_KEY},
         "voice": {
             "ASSEMBLYAI_API_KEY": ASSEMBLYAI_API_KEY,
+            "ASSEMBLYAI_AGENT_ID": ASSEMBLYAI_AGENT_ID,
             "LLM_PROXY_URL": LLM_PROXY_URL,
         },
         "lead_notification": {
