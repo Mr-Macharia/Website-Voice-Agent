@@ -105,6 +105,32 @@ BEDROCK_BASE_URL = _get("BEDROCK_BASE_URL", "https://bedrock-mantle.us-east-1.ap
 BEDROCK_API_KEY = _get("BEDROCK_API_KEY")
 BEDROCK_MODEL_ID = _get("BEDROCK_MODEL_ID", "deepseek.v3.2")
 
+# --- Voice (AssemblyAI Voice Agent API) -----------------------------------
+# The voice path runs on AssemblyAI's Voice Agent API: one WebSocket carrying
+# STT, turn detection, and TTS. It replaced LiveKit, whose metered resource was
+# connection minutes rather than speech, and Deepgram TTS along with it.
+#
+# The browser never sees ASSEMBLYAI_API_KEY. It calls /api/voice/token, which
+# mints a short-lived single-use token server-side.
+ASSEMBLYAI_API_KEY = _get("ASSEMBLYAI_API_KEY")
+# Voice IDs are exact strings and are rejected at session.update if wrong.
+# Current catalog: alba, eve, george, jane, jean, mary, michael (US);
+# anna, charles, paul, vera (UK). See core/persona.py for the tone this matches.
+ASSEMBLYAI_VOICE = _get("ASSEMBLYAI_VOICE", "anna")
+# near-field for headsets and laptop mics held close; far-field for rooms.
+# This is what suppresses a TV or background chatter before it reaches STT.
+ASSEMBLYAI_VOICE_FOCUS = _get("ASSEMBLYAI_VOICE_FOCUS", "near-field")
+# min_latency | balanced | max_accuracy. Presets how long the model waits in
+# silence before ending a turn; the cleanest single turn-taking knob.
+ASSEMBLYAI_TRANSCRIPTION_MODE = _get("ASSEMBLYAI_TRANSCRIPTION_MODE", "balanced")
+
+# AssemblyAI calls our LLM proxy server-to-server, so the URL must be public
+# HTTPS — localhost is rejected. Local dev points at the deployed instance.
+# The shared secret is passed as the llm[].api_key and checked on arrival, so
+# the public endpoint isn't open to anyone who finds it.
+LLM_PROXY_URL = _get("LLM_PROXY_URL")
+LLM_PROXY_SECRET = _get("LLM_PROXY_SECRET")
+
 # --- Content --------------------------------------------------------------
 CONTENT_DIR = BACKEND_DIR / "content"
 DOCUMENTS_DIR = CONTENT_DIR / "documents"
@@ -129,6 +155,20 @@ def gmail_available() -> bool:
     return bool(COMPOSIO_API_KEY)
 
 
+def voice_available() -> bool:
+    """Voice needs the AssemblyAI key plus a reachable LLM for replies.
+
+    The LLM proxy is what keeps the provider fallback chain alive, since
+    AssemblyAI accepts only one llm entry. Without a public proxy URL the
+    agent would connect and then be unable to say anything.
+    """
+    return bool(ASSEMBLYAI_API_KEY and LLM_PROXY_URL and llm_available())
+
+
+def llm_available() -> bool:
+    return bool(BEDROCK_API_KEY or XAI_API_KEY or OPENAI_API_KEY)
+
+
 def lead_notification_available() -> bool:
     return bool(LEAD_NOTIFY_EMAIL and LEAD_SMTP_USER and LEAD_SMTP_APP_PASSWORD)
 
@@ -140,6 +180,10 @@ def missing_for(feature: str) -> list[str]:
         "booking": {"CALCOM_BOOKING_URL": CALCOM_BOOKING_URL},
         "leads": {"DATABASE_URL": DATABASE_URL},
         "gmail": {"COMPOSIO_API_KEY": COMPOSIO_API_KEY},
+        "voice": {
+            "ASSEMBLYAI_API_KEY": ASSEMBLYAI_API_KEY,
+            "LLM_PROXY_URL": LLM_PROXY_URL,
+        },
         "lead_notification": {
             "LEAD_NOTIFY_EMAIL": LEAD_NOTIFY_EMAIL,
             "LEAD_SMTP_USER": LEAD_SMTP_USER,

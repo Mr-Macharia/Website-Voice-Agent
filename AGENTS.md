@@ -256,7 +256,12 @@ both.
 - Dev (backend + worker, no frontend): `npm run dev`
 - Dev (backend + worker + frontend): `npm run dev:all`
 - Dev backend only: `npm run dev:backend` (FastAPI + Agno AgentOS, port 7777)
-- Dev LiveKit worker only: `npm run dev:worker`
+- Dev LiveKit worker only: `npm run dev:worker` (legacy voice path only)
+
+Voice runs on the AssemblyAI Voice Agent API; the LiveKit worker is only
+needed with `NEXT_PUBLIC_VOICE_PROVIDER=livekit`. Voice requires a
+publicly-reachable `LLM_PROXY_URL` even in local development, because
+AssemblyAI calls it server-to-server. See `docs/voice-assemblyai.md`.
 - Dev frontend only: `npm run dev:frontend` (http://localhost:3000)
 - Frontend build: `cd frontend && npm run build`
 - Frontend production server: `cd frontend && npm run start`

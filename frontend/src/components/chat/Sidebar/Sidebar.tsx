@@ -16,7 +16,7 @@ import { useQueryState } from 'nuqs'
 import { truncateText } from '@/lib/utils'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Mic, Sparkles } from 'lucide-react'
-import LiveKitVoiceModal from '@/components/voice/LiveKitVoiceModal'
+import VoiceModal from '@/components/voice/VoiceModal'
 
 const ENDPOINT_PLACEHOLDER = 'NO ENDPOINT ADDED'
 
@@ -355,7 +355,7 @@ const Sidebar = ({
       </motion.aside>
 
       {/* Voice Assistant Modal */}
-      <LiveKitVoiceModal
+      <VoiceModal
         isOpen={isVoiceModalOpen}
         onClose={() => setIsVoiceModalOpen(false)}
         agentName={activeAgentName}

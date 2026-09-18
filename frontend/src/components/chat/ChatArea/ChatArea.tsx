@@ -7,7 +7,7 @@ import { useStore } from '@/store'
 import { useQueryState } from 'nuqs'
 import { Mic, Trash2, Copy, Check, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import LiveKitVoiceModal from '@/components/voice/LiveKitVoiceModal'
+import VoiceModal from '@/components/voice/VoiceModal'
 import useChatActions from '@/hooks/useChatActions'
 import { toast } from 'sonner'
 
@@ -111,7 +111,7 @@ const ChatAreaHeader = () => {
       </header>
 
       {/* Voice Assistant Modal */}
-      <LiveKitVoiceModal
+      <VoiceModal
         isOpen={isVoiceOpen}
         onClose={() => setIsVoiceOpen(false)}
         agentName={agentName}
