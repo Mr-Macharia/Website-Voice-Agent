@@ -8,12 +8,11 @@ import useAIChatStreamHandler from '@/hooks/useAIStreamHandler'
 import { toast } from 'sonner'
 
 const TECH_BADGES = [
-  { name: 'Deepgram Flux TTS', highlight: true },
-  { name: 'Deepgram Nova-3 STT', highlight: true },
-  { name: 'Agno AgentOS', highlight: false },
-  { name: 'Grok xAI / GPT-4o', highlight: false },
-  { name: 'Low-Latency WebSocket', highlight: true },
-  { name: 'Next.js & Web Audio', highlight: false }
+  { name: 'RAG', highlight: true },
+  { name: 'Voice', highlight: true },
+  { name: 'Search', highlight: false },
+  { name: 'Booking', highlight: false },
+  { name: 'Conversational', highlight: true }
 ]
 
 // The agent speaks about Gichogu in the third person — it's his assistant, not
@@ -65,7 +64,7 @@ const ChatBlankState = () => {
         className="mb-4 inline-flex items-center gap-2 rounded-full border border-[#e85d04]/30 bg-[#e85d04]/10 px-4 py-1.5 font-mono text-xs font-semibold uppercase tracking-wider text-[#f48c06] shadow-sm shadow-orange-950/20"
       >
         <span className="size-2 animate-pulse rounded-full bg-[#22c55e]" />
-        <span>AI/ML Engineer • Realtime Voice Agent OS</span>
+        <span>AI/ML Engineer • Conversational Portfolio</span>
       </motion.div>
 
       {/* Hero Title */}
@@ -79,8 +78,8 @@ const ChatBlankState = () => {
           Gichogu <span className="accent-gradient-text">Macharia</span>
         </h1>
         <p className="mx-auto max-w-2xl text-sm leading-relaxed text-zinc-400 sm:text-base">
-          Building intelligent systems, conversational voice agents powered by
-          Deepgram Flux & Nova-3, and multi-agent workflows with Agno.
+          A portfolio you can actually talk to. Ask Clyde about my work, my
+          projects, or book a time — by text or by voice.
         </p>
       </motion.div>
 

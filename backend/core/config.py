@@ -156,7 +156,7 @@ ASSEMBLYAI_AGENT_ID = _get("ASSEMBLYAI_AGENT_ID")
 # Voice IDs are exact strings and are rejected at session.update if wrong.
 # Current catalog: alba, eve, george, jane, jean, mary, michael (US);
 # anna, charles, paul, vera (UK). See core/persona.py for the tone this matches.
-ASSEMBLYAI_VOICE = _get("ASSEMBLYAI_VOICE", "anna")
+ASSEMBLYAI_VOICE = _get("ASSEMBLYAI_VOICE", "michael")
 # near-field for headsets and laptop mics held close; far-field for rooms.
 # This is what suppresses a TV or background chatter before it reaches STT.
 ASSEMBLYAI_VOICE_FOCUS = _get("ASSEMBLYAI_VOICE_FOCUS", "near-field")

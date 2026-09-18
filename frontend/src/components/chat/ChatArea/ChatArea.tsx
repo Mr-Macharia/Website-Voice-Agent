@@ -20,9 +20,7 @@ const ChatAreaHeader = () => {
   const [copied, setCopied] = useState(false)
 
   const activeAgent = agents.find((a) => a.id === agentId)
-  const agentName =
-    activeAgent?.name ||
-    (teamId ? `Team: ${teamId}` : 'Realtime Voice Assistant')
+  const agentName = activeAgent?.name || (teamId ? `Team: ${teamId}` : 'Clyde')
 
   const copyFullConversation = () => {
     if (messages.length === 0) {
@@ -59,7 +57,9 @@ const ChatAreaHeader = () => {
             <div className="flex items-center gap-2 font-mono text-[11px] text-zinc-400">
               <span>{selectedModel || 'grok-4.20-non-reasoning'}</span>
               <span>•</span>
-              <span className="text-orange-400/90">Deepgram Flux 24kHz</span>
+              <span className="text-orange-400/90">
+                Gichogu&apos;s AI assistant
+              </span>
             </div>
           </div>
         </div>
