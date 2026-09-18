@@ -381,8 +381,14 @@ export class AssemblyAISession {
     }
 
     this.pendingToolResults.push({ callId, result })
-    // Send now only if no turn is in flight; otherwise wait for reply.done.
-    if (this.lastEvent === 'reply.done' || this.lastEvent === null) {
+    // Send now if no reply is in flight. `input.speech.started` counts as idle:
+    // the visitor interrupted, so the agent is listening rather than speaking,
+    // and it is waiting on this result to answer the new question.
+    //
+    // Treating it as busy was a deadlock — after any barge-in, lastEvent stayed
+    // 'input.speech.started' until some later reply.done, so the result sat in
+    // the browser and the agent never answered at all.
+    if (this.lastEvent !== 'reply.started') {
       this.flushToolResults()
     }
   }
