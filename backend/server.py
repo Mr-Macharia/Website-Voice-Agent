@@ -21,7 +21,7 @@ from typing import Optional
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, HTTPException, Request
 import httpx
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.responses import JSONResponse, HTMLResponse, StreamingResponse
 from pydantic import BaseModel
 import websockets
 
@@ -39,7 +39,9 @@ from core import guardrails
 from core import knowledge as core_knowledge
 from core import persona
 from core.adapters.agno import SiteTools
+from core.adapters import assemblyai as voice_tools
 from core.tools import gmail as _gmail
+from voice import llm_proxy, session_config
 
 # ---------------------------------------------------------------------------
 # Database & Memory Persistence — PostgreSQL
@@ -171,6 +173,116 @@ async def info_check():
             "gmail_scope": core_config.GMAIL_SCOPE if core_config.gmail_available() else None,
         },
     }
+
+# ---------------------------------------------------------------------------
+# Voice — AssemblyAI Voice Agent API
+#
+# The browser holds the WebSocket to AssemblyAI directly; the backend serves
+# three things it can't do itself: a token (the API key must never reach the
+# client), the session config (the persona lives in Python), and the tool calls
+# (they need Postgres, pgvector and Composio).
+# ---------------------------------------------------------------------------
+ASSEMBLYAI_AGENTS_URL = "https://agents.assemblyai.com/v1"
+
+
+@base_app.get("/api/voice/token")
+async def voice_token():
+    """Mint a single-use token and return it with the session config.
+
+    Tokens are single-use and short-lived, so the client fetches a fresh one
+    for every connection — including reconnects.
+    """
+    if not core_config.ASSEMBLYAI_API_KEY:
+        raise HTTPException(
+            status_code=503,
+            detail="Voice isn't configured. ASSEMBLYAI_API_KEY is missing.",
+        )
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                f"{ASSEMBLYAI_AGENTS_URL}/token",
+                params={
+                    "expires_in_seconds": 300,
+                    "max_session_duration_seconds": 3600,
+                },
+                # This product wants a Bearer prefix; AssemblyAI's other APIs
+                # take the raw key. Mixing them up gives a 401.
+                headers={"Authorization": f"Bearer {core_config.ASSEMBLYAI_API_KEY}"},
+            )
+    except httpx.HTTPError as e:
+        raise HTTPException(
+            status_code=502,
+            detail="Couldn't reach the voice service. Check your connection and try again.",
+        ) from e
+
+    if resp.status_code == 401:
+        raise HTTPException(
+            status_code=502,
+            detail="The AssemblyAI API key was rejected. Check ASSEMBLYAI_API_KEY.",
+        )
+    if resp.status_code >= 400:
+        raise HTTPException(
+            status_code=502,
+            detail="Couldn't start a voice session right now. Please try again.",
+        )
+
+    token = resp.json().get("token")
+    if not token:
+        raise HTTPException(status_code=502, detail="Voice service returned no token.")
+
+    session = session_config.build_session()
+    if not session.get("llm"):
+        # Empty llm means AssemblyAI's managed model, which knows nothing about
+        # the owner and would answer from its own memory — the exact failure
+        # persona._GROUNDING exists to prevent. Refuse rather than ship that.
+        raise HTTPException(
+            status_code=503,
+            detail="Voice isn't configured. LLM_PROXY_URL and LLM_PROXY_SECRET are required.",
+        )
+
+    return {"token": token, "session": session}
+
+
+class VoiceToolRequest(BaseModel):
+    name: str
+    arguments: dict = {}
+
+
+@base_app.post("/api/voice/tool")
+async def voice_tool(req: VoiceToolRequest):
+    """Run a tool the agent asked for and return the result.
+
+    The browser relays tool.call here because the tools need the database, the
+    knowledge base and the Composio session. Failures come back as readable
+    text rather than errors — the agent reads the result aloud and recovers,
+    where a 500 would leave the visitor in silence.
+    """
+    result = await voice_tools.dispatch(req.name, req.arguments)
+    return {"result": result}
+
+
+@base_app.post("/api/llm/chat/completions")
+async def voice_llm_proxy(request: Request):
+    """OpenAI-compatible endpoint that AssemblyAI calls for every reply.
+
+    Public by necessity — AssemblyAI calls it server-to-server — so it is
+    guarded by a shared secret sent as the llm[].api_key.
+    """
+    if not llm_proxy.authorized(request.headers.get("authorization")):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    try:
+        payload = await request.json()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="Invalid JSON body") from e
+
+    return StreamingResponse(
+        llm_proxy.stream_completion(payload),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+    )
+
 
 # ---------------------------------------------------------------------------
 # LiveKit Token Generation Endpoints

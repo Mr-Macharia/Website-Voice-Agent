@@ -8,7 +8,7 @@ import useAIChatStreamHandler from '@/hooks/useAIStreamHandler'
 import { useQueryState } from 'nuqs'
 import Icon from '@/components/ui/icon'
 import { Mic, Sparkles } from 'lucide-react'
-import LiveKitVoiceModal from '@/components/voice/LiveKitVoiceModal'
+import VoiceModal from '@/components/voice/VoiceModal'
 
 const ChatInput = () => {
   const { chatInputRef, agents } = useStore()
@@ -119,7 +119,7 @@ const ChatInput = () => {
       </div>
 
       {/* Voice Assistant Modal */}
-      <LiveKitVoiceModal
+      <VoiceModal
         isOpen={isVoiceOpen}
         onClose={() => setIsVoiceOpen(false)}
         agentName={activeAgentName}
