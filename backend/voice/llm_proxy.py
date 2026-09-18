@@ -40,10 +40,25 @@ _TIMEOUT = httpx.Timeout(connect=5.0, read=60.0, write=10.0, pool=5.0)
 def _providers() -> list[dict]:
     """Upstreams in priority order, best first.
 
-    xAI leads, not Bedrock/DeepSeek. Measured against the Voice Agent API's
-    tool-calling protocol:
+    Order is set by a measured protocol probe, not by preference. Each model
+    is checked on two things the Voice Agent API depends on: does it emit a
+    tool call when it clearly should, and does it turn a completed tool result
+    into clean speech?
 
-      - deepseek.v3.2 given a tool it clearly should use emitted ZERO tool
+      - deepseek-flash (V4.1-Flash, DeepSeek's own API) leads. It passes both
+        tests and needs the reasoning_content quirk; see
+        _apply_provider_quirks.
+      - grok-4.6 passes both with no quirk and is the fallback.
+
+    On latency the two are close. Warm first-token over three runs each:
+    deepseek-flash 0.50s / 0.50s / 0.89s, grok-4.6 0.57s / 0.59s / 0.64s.
+    An earlier 2.7s grok reading was a cold-start outlier, not its steady
+    state. So this order is not a speed decision, and one slow measurement is
+    not a reason to re-order them.
+
+    The Bedrock-hosted deepseek.v3.2 is a different generation and fails:
+
+        given a tool it clearly should use it emitted ZERO tool
         calls and answered from nothing. Handed a completed tool result, it
         replied with the malformed control token "<|DSML|function_calls"
         instead of an answer. Live, it spoke AssemblyAI's own orchestration
@@ -51,26 +66,16 @@ def _providers() -> list[dict]:
         existence...", "Use the reply box to speak to the person...") — the
         model failing the protocol and spilling the rules instead of following
         them.
-      - grok-4.6, grok-4.5 and grok-4.20-non-reasoning all called the tool
-        correctly with no spoken text, and turned a tool result into a clean
-        two-sentence spoken answer.
 
     This is the same class of defect the LiveKit worker recorded for
     nemotron-nano-3-30b, which printed 'search_web(...)' as literal text.
     Tool calling with conversation history is the thing to test before
     changing a model here; latency is secondary.
 
-    DeepSeek stays as a last resort so voice still answers if xAI is down.
+    Bedrock stays last so voice still answers if both other providers are
+    down, accepting that its replies will be worse than silence is.
     """
     out: list[dict] = []
-
-    if config.XAI_API_KEY:
-        out.append({
-            "name": "xai",
-            "base_url": "https://api.x.ai/v1",
-            "api_key": config.XAI_API_KEY,
-            "model": config.XAI_MODEL_ID or "grok-4.6",
-        })
 
     if config.DEEPSEEK_API_KEY:
         out.append({
@@ -81,6 +86,14 @@ def _providers() -> list[dict]:
             # V4 is a thinking model with a non-standard requirement, see
             # _apply_provider_quirks.
             "needs_reasoning_echo": True,
+        })
+
+    if config.XAI_API_KEY:
+        out.append({
+            "name": "xai",
+            "base_url": "https://api.x.ai/v1",
+            "api_key": config.XAI_API_KEY,
+            "model": config.XAI_MODEL_ID or "grok-4.6",
         })
 
     if config.OPENAI_API_KEY:
