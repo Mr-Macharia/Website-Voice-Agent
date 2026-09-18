@@ -64,7 +64,13 @@ def build_agent() -> dict:
             "voice_focus": config.ASSEMBLYAI_VOICE_FOCUS,
             "transcription_mode": config.ASSEMBLYAI_TRANSCRIPTION_MODE,
             "keyterms": _KEYTERMS,
-            "turn_detection": {"interrupt_response": True},
+            "turn_detection": {
+                "interrupt_response": True,
+                # Still no min_silence/max_silence: setting either disables
+                # adaptive pacing for the whole session. interruption_delay is
+                # safe to tune — it only gates barge-in, not end-of-turn.
+                "interruption_delay": config.ASSEMBLYAI_INTERRUPTION_DELAY,
+            },
         },
         "output": {
             "voice": config.ASSEMBLYAI_VOICE,

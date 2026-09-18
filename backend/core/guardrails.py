@@ -144,6 +144,70 @@ _META_PREFIX_RE = re.compile(
 )
 
 
+# A fifth shape, and the one the head-only cleaner could not reach: the model
+# emits invented instruction prose in the MIDDLE of a reply, then continues the
+# real answer — observed live as:
+#   "If the user is asleep, offline, disinterested, etc., act accordingly.
+#    Gichogu is an AI and machine learning specialist..."
+#   "There is no need to ever narrate that you looked something up.a lead in
+#    student mentorship programs..."
+# Neither sentence exists in persona.py. The model is not quoting its prompt,
+# it is generating new text in the prompt's register — a 2,500-token wall of
+# second-person imperatives bleeding into the output.
+#
+# These are matched anywhere in the reply, unlike _META_LINE_RE, because the
+# shape itself is disqualifying: the agent is addressing "the user" in the
+# third person, or telling itself what to do. A real spoken reply talks TO the
+# visitor, never ABOUT them as "the user", and never issues itself orders.
+#
+# Kept tight for that reason — each alternative needs a subject that no genuine
+# answer about a person's career would use.
+_SELF_INSTRUCTION_RE = re.compile(
+    r"""(?ix)
+    (?:^|(?<=[.!?\n]))\s*
+    (?:
+        # "If the user is asleep, offline, ..., act accordingly." — a rule
+        # about the visitor, not speech addressed to them. Requires a verb
+        # after the subject so "If the user guide interests you" is untouched.
+        if \s+ the \s+ (?:user|visitor) \s+
+        (?:is|are|was|were|has|have|does|do|seems?|wants?|asks?|starts?|stops?)
+        \b
+        (?: [^.!?\n] | (?<=\betc)\. | (?<=\be\.g)\. | (?<=\bi\.e)\. )*
+      | # "There is no need to ever narrate ..." / "Do not narrate ..."
+        (?:there\s+is\s+no\s+need\s+to|you\s+(?:should|must|need\s+to)\s+never|
+           (?:do\s+not|don't|never)) \s+
+        (?:ever\s+)?
+        (?:narrate|mention\s+that\s+you|state\s+that\s+you|say\s+that\s+you|
+           reveal|disclose|announce)
+        \s+ [^.!?\n]*
+      | # "Answer only from what the tool returned." — tool-usage rules.
+        (?:answer|respond|reply) \s+ only \s+ (?:from|with|using) \s+ [^.!?\n]*
+      | # "Use capture_lead when ..." — naming our own tools aloud.
+        (?:use|call|invoke) \s+ (?:the\s+)?
+        (?:search_about_owner|search_web|capture_lead|get_booking_link)
+        \b [^.!?\n]*
+    )
+    [.!?]* \s*
+    """,
+)
+
+
+def strip_self_instructions(text: str) -> str:
+    """Drop invented instruction prose from anywhere in a reply.
+
+    Unlike the other guards this is not anchored to the start, because the
+    model emits these mid-reply and then carries on with the real answer.
+    """
+    if not text:
+        return text
+    cleaned, n = _SELF_INSTRUCTION_RE.subn(" ", text)
+    if n:
+        logger.warning("Stripped %d self-instruction fragment(s)", n)
+        # The strip can leave a doubled space or an answer resuming mid-word.
+        cleaned = re.sub(r"[ \t]{2,}", " ", cleaned).strip()
+    return cleaned
+
+
 # A fourth shape, seen on the AssemblyAI path: the model narrates its own
 # retrieval step as a connector and then gives the real answer in the SAME
 # sentence — "Based on that, his work involves building AI systems", "The user
@@ -276,5 +340,7 @@ def strip_meta_instructions(text: str) -> str:
 def clean_output(text: str) -> str:
     """Everything that must never reach a visitor, in one call."""
     return strip_unapproved_urls(
-        strip_control_tokens(strip_tool_preamble(strip_meta_instructions(text)))
+        strip_control_tokens(
+            strip_self_instructions(strip_tool_preamble(strip_meta_instructions(text)))
+        )
     )

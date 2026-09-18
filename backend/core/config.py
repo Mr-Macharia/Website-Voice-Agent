@@ -153,6 +153,14 @@ ASSEMBLYAI_VOICE_FOCUS = _get("ASSEMBLYAI_VOICE_FOCUS", "near-field")
 # min_latency | balanced | max_accuracy. Presets how long the model waits in
 # silence before ending a turn; the cleanest single turn-taking knob.
 ASSEMBLYAI_TRANSCRIPTION_MODE = _get("ASSEMBLYAI_TRANSCRIPTION_MODE", "balanced")
+# How long the visitor must speak before they can cut the agent off, in ms
+# (0-1000). The API default follows transcription_mode and is 500 on balanced,
+# which tested as sluggish — you had to talk over the agent for noticeably too
+# long before it stopped. 100 makes barge-in feel immediate.
+#
+# Raising it is the first thing to try if the agent starts interrupting itself,
+# or if short back-channels ("mm-hmm", "right") cut it off.
+ASSEMBLYAI_INTERRUPTION_DELAY = _get_int("ASSEMBLYAI_INTERRUPTION_DELAY", 100)
 
 # AssemblyAI calls our LLM proxy server-to-server, so the URL must be public
 # HTTPS — localhost is rejected. Local dev points at the deployed instance.
