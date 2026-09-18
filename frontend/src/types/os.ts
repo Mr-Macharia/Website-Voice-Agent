@@ -1,6 +1,15 @@
 export interface ToolCall {
   role: 'user' | 'tool' | 'system' | 'assistant'
   content: string | null
+  /**
+   * The tool's return value as the live run stream sends it.
+   *
+   * AgentOS emits the result on `result`; the session-replay path
+   * (useSessionLoader) builds tool calls from `reasoning_messages`, where the
+   * same text arrives on `content`. Both spellings occur, so read them through
+   * `toolResultText` rather than picking one.
+   */
+  result?: string | null
   tool_call_id: string
   tool_name: string
   tool_args: Record<string, string>

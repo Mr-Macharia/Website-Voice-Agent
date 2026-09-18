@@ -30,6 +30,7 @@ from __future__ import annotations
 import logging
 
 from core import config
+from core import ui_payload
 
 logger = logging.getLogger("core.tools.booking")
 
@@ -49,7 +50,7 @@ async def get_booking_link() -> str:
             f"instead so {config.OWNER_NAME} can reach out."
         )
 
-    return (
+    spoken = (
         f"Booking link: {url}\n\n"
         "Give the visitor this link so they can pick a time that suits them. "
         "Say it is for an AI and automation consultation. Do not state specific "
@@ -57,4 +58,16 @@ async def get_booking_link() -> str:
         "their own timezone there. When speaking the link aloud, read it "
         "naturally: cal dot com slash macharia. Afterwards you may offer to "
         "take their details as well, so he knows to expect them."
+    )
+
+    # The text chat renders a card from this; voice strips it and speaks the
+    # sentence above unchanged. See core/ui_payload.py.
+    return ui_payload.attach(
+        spoken,
+        {
+            "type": "booking",
+            "url": url,
+            "label": "Book a chat",
+            "note": "AI and automation consultation",
+        },
     )

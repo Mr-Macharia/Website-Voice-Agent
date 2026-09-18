@@ -88,6 +88,95 @@ def strip_control_tokens(text: str) -> str:
     return cleaned.lstrip()
 
 
+# Interactive tool results (the booking card, the lead form) are rendered by the
+# client from a structured payload. The model is told a form appears, and some
+# runs respond by trying to *draw* it -- emitting a literal "<form></form>", or
+# a run of empty "```json {}" blocks, into the reply text. Live runs produced
+# both. The persona now forbids it, but a persona rule is a strong prior, not a
+# guarantee, so the markup is also removed here.
+_UI_MARKUP_RE = re.compile(
+    "|".join([
+        # A form element the model drew itself, with whatever it put inside.
+        r"<\s*form\b[^>]*>.*?<\s*/\s*form\s*>",
+        # ...including the unclosed case, to end of text.
+        r"<\s*form\b[^>]*>.*\Z",
+        # Stray input/label/button tags outside a form.
+        r"<\s*/?\s*(?:input|label|button|select|textarea|option)\b[^>]*>",
+    ]),
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+# A fenced block whose body is empty or just "{}" / "[]". Matched on a scan of
+# fence runs rather than with one regex: live output contained SIX-backtick
+# fences, unterminated and overlapping, and a regex that assumed balanced ```
+# fences chewed the backticks off while leaving "json {}" as visible text.
+_EMPTY_FENCE_BODY_RE = re.compile(r"\A\s*(?:\{\s*\}|\[\s*\])?\s*\Z")
+_FENCE_RUN_RE = re.compile(r"`{3,}[ \t]*([A-Za-z0-9_+-]*)[ \t]*\r?\n?")
+
+
+def strip_empty_fences(text: str) -> str:
+    """Drop fenced blocks that carry no content.
+
+    The model sometimes tries to emit a tool's UI payload as text and produces
+    a run of "```json {}" blocks. A block with real content is left alone, so
+    genuine code in a reply survives.
+    """
+    if "`" not in text:
+        return text
+
+    out: list[str] = []
+    pos = 0
+    changed = False
+
+    while True:
+        opener = _FENCE_RUN_RE.search(text, pos)
+        if not opener:
+            break
+
+        ticks = opener.group(0).count("`")
+        # A fence run followed by a language tag is a new OPENER, not this
+        # block's closer. The runaway output was "``````json {} ``````json ..."
+        # -- consecutive openers with no closers. Treating the next run as a
+        # closer made "json\n{}" look like a real body and kept it.
+        closer = re.compile(r"`{%d,}(?![ \t]*[A-Za-z0-9_+-])" % ticks).search(
+            text, opener.end()
+        )
+        next_opener = _FENCE_RUN_RE.search(text, opener.end())
+        if next_opener and (not closer or next_opener.start() < closer.start()):
+            closer = None
+            body_end = next_opener.start()
+        else:
+            body_end = closer.start() if closer else len(text)
+        body = text[opener.end() : body_end]
+
+        if _EMPTY_FENCE_BODY_RE.match(body):
+            # Empty block: keep what came before it and skip past it entirely.
+            out.append(text[pos : opener.start()])
+            pos = closer.end() if closer else body_end
+            changed = True
+        else:
+            # Real content: keep the whole block, fences included.
+            keep_to = closer.end() if closer else body_end
+            out.append(text[pos:keep_to])
+            pos = keep_to
+
+    out.append(text[pos:])
+    return "".join(out) if changed else text
+
+
+def strip_ui_markup(text: str) -> str:
+    """Remove UI markup the model drew instead of leaving to the client."""
+    if not text:
+        return text
+    cleaned = strip_empty_fences(_UI_MARKUP_RE.sub("", text))
+    if cleaned != text:
+        logger.warning("Stripped hallucinated UI markup from output")
+        # Collapse the blank space the removal leaves behind.
+        cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
+
+
 def strip_unapproved_urls(text: str) -> str:
     """Remove URLs pointing anywhere the agent has no business sending people.
 
@@ -340,7 +429,11 @@ def strip_meta_instructions(text: str) -> str:
 def clean_output(text: str) -> str:
     """Everything that must never reach a visitor, in one call."""
     return strip_unapproved_urls(
-        strip_control_tokens(
-            strip_self_instructions(strip_tool_preamble(strip_meta_instructions(text)))
+        strip_ui_markup(
+            strip_control_tokens(
+                strip_self_instructions(
+                    strip_tool_preamble(strip_meta_instructions(text))
+                )
+            )
         )
     )

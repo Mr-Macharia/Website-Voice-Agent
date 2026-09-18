@@ -99,10 +99,17 @@ class SiteTools(Toolkit):
         intent: str = "",
         message: str = "",
     ) -> str:
-        """Pass a visitor's contact details to Gichogu.
+        """Pass a visitor's contact details to Gichogu, or show them a form.
 
         Use when someone shows interest in working with him, or wants him to get
-        in touch. Ask for their details once, naturally — never pressure them.
+        in touch. Never pressure them.
+
+        In this written chat you do NOT have to ask for the details in prose.
+        Call this with no arguments as soon as they agree to leave their
+        details: that renders a short form they fill in themselves, which is
+        faster for them and avoids you mis-transcribing an email address. Say
+        one line like "Pop your details in here" and call it. Only pass
+        arguments when they have already given you the details unprompted.
 
         Args:
             name (str): The visitor's name.

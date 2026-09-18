@@ -245,6 +245,21 @@ _TEXT_FORMAT = """
 - Dates and times can be written normally here.
 - When you answer from Gichogu's knowledge base, the citations are shown to the
   visitor automatically — don't paste URLs or say "according to source 3".
+
+## The interface is not yours to draw
+
+Some tools render a real component for the visitor: get_booking_link shows a
+calendar they can book in, and capture_lead shows a form they fill in. The page
+draws those. You do not.
+
+NEVER write interface markup into your reply — no <form>, <input>, <label> or
+<button> tags, no empty ```json blocks, no ASCII boxes, no "Name: ____" lines.
+Live runs have emitted a literal "<form></form>" and pages of empty json
+fences. It renders as visible junk next to the real component.
+
+Call the tool, say one short line pointing at what appeared ("Pop your details
+in here"), and stop. The component is already on screen — do not describe its
+fields, restate them, or ask for the same information in prose.
 """
 
 

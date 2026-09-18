@@ -17,6 +17,7 @@ import re
 from typing import Optional
 
 from core import config
+from core import ui_payload
 
 logger = logging.getLogger("core.tools.leads")
 
@@ -140,7 +141,27 @@ async def capture_lead(
         )
 
     if not (email or name):
-        return "Ask for at least a name or an email before saving anything."
+        # The agent reached for this tool before it had anything to save. In
+        # text chat that is the moment to show a form rather than ask again in
+        # prose: the visitor types the fields once and they arrive validated.
+        # Voice has no form, so it strips the payload and speaks the sentence.
+        return ui_payload.attach(
+            "Ask for at least a name or an email before saving anything.",
+            {
+                "type": "lead_form",
+                "fields": ["name", "email", "company", "message"],
+                "known": {
+                    k: v
+                    for k, v in (
+                        ("name", name),
+                        ("email", email),
+                        ("company", company),
+                        ("message", message),
+                    )
+                    if v
+                },
+            },
+        )
 
     try:
         lead_id = await asyncio.to_thread(
@@ -163,7 +184,10 @@ async def capture_lead(
         source=source,
     )
 
-    return (
-        f"Saved. Tell them their details are with {config.OWNER_NAME} and he'll "
-        f"be in touch."
+    return ui_payload.attach(
+        (
+            f"Saved. Tell them their details are with {config.OWNER_NAME} and "
+            f"he'll be in touch."
+        ),
+        {"type": "lead_saved", "lead_id": lead_id},
     )

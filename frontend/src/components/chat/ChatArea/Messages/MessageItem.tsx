@@ -1,3 +1,4 @@
+import { stripEmptyFences, stripToolPayload } from '@/lib/toolPayload'
 import MarkdownRenderer from '@/components/ui/typography/MarkdownRenderer'
 import { useStore } from '@/store'
 import type { ChatMessage } from '@/types/os'
@@ -29,7 +30,9 @@ const AgentMessage = ({ message }: MessageProps) => {
   } else if (message.content) {
     messageContent = (
       <div className="flex w-full flex-col gap-4 font-main text-sm leading-relaxed text-zinc-100">
-        <MarkdownRenderer>{message.content}</MarkdownRenderer>
+        <MarkdownRenderer>
+          {stripEmptyFences(stripToolPayload(message.content))}
+        </MarkdownRenderer>
         {message.videos && message.videos.length > 0 && (
           <Videos videos={message.videos} />
         )}

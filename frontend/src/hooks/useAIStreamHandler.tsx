@@ -9,7 +9,6 @@ import { constructEndpointUrl } from '@/lib/constructEndpointUrl'
 import useAIResponseStream from './useAIResponseStream'
 import { ToolCall } from '@/types/os'
 import { useQueryState } from 'nuqs'
-import { getJsonMarkdown } from '@/lib/utils'
 
 const useAIChatStreamHandler = () => {
   const setMessages = useStore((state) => state.setMessages)
@@ -264,16 +263,6 @@ const useAIChatStreamHandler = () => {
                   if (chunk.audio) {
                     lastMessage.audio = chunk.audio
                   }
-                } else if (
-                  lastMessage &&
-                  lastMessage.role === 'agent' &&
-                  typeof chunk?.content !== 'string' &&
-                  chunk.content !== null
-                ) {
-                  const jsonBlock = getJsonMarkdown(chunk?.content)
-
-                  lastMessage.content += jsonBlock
-                  lastContent = jsonBlock
                 } else if (
                   chunk.response_audio?.transcript &&
                   typeof chunk.response_audio?.transcript === 'string'

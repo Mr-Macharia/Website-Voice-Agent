@@ -22,7 +22,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, HTTPExceptio
 import httpx
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, HTMLResponse, StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import websockets
 
 from agno.agent import Agent
@@ -38,6 +38,9 @@ from core import db as core_db
 from core import guardrails
 from core import knowledge as core_knowledge
 from core import persona
+from core import rate_limit
+from core import ui_payload
+from core.tools import leads as core_leads
 from core.adapters.agno import SiteTools
 from core.adapters import assemblyai as voice_tools
 from core.tools import gmail as _gmail
@@ -63,19 +66,95 @@ else:
 # ---------------------------------------------------------------------------
 # Agent Definitions
 # ---------------------------------------------------------------------------
-xai_key = os.getenv("XAI_API_KEY")
-openai_key = os.getenv("OPENAI_API_KEY")
-bedrock_url = os.getenv("BEDROCK_BASE_URL", "https://bedrock-mantle.us-east-1.api.aws/v1")
-bedrock_key = os.getenv("BEDROCK_API_KEY")
-bedrock_model = os.getenv("BEDROCK_MODEL_ID", "deepseek.v3.2")
+# Provider order, matching voice/llm_proxy.py's _providers(). Both paths pick a
+# model for the same job — tool calling with conversation history — so they must
+# agree, and until now they were inverted: the proxy ranked Bedrock's
+# deepseek.v3.2 LAST ("its replies will be worse than silence") while this file
+# ranked it FIRST for both agents.
+#
+# That was not theoretical. Probed directly against both endpoints:
+#
+#     deepseek.v3.2   emits the tool call, then leaks the raw control token
+#                     "<｜DSML｜function_calls" into visible content
+#     deepseek-flash  emits the tool call cleanly, no leaked tokens
+#
+# Visitors saw that token in the chat transcript. Bedrock stays configured as
+# the last resort so the site still answers if the others are down.
+#
+# On deepseek-flash and reasoning_content: llm_proxy._apply_provider_quirks
+# echoes an empty reasoning_content because DeepSeek once rejected follow-up
+# turns that omitted it. Agno's OpenAIChat._format_message sends only role,
+# content, name, tool_call_id and tool_calls, so it cannot echo that field —
+# but a live probe confirms the API now accepts the follow-up either way, so no
+# subclass is needed here. If DeepSeek reinstates the requirement, the symptom
+# is a 400 on the turn after any tool call, and the fix is to override
+# _format_message the way the proxy patches the body.
+# Agno maps the system role to "developer" (OpenAI's newer name for it) for
+# every OpenAIChat model. DeepSeek's API rejects that variant outright:
+#
+#     422 messages[0].role: unknown variant `developer`, expected one of
+#     `system`, `user`, `assistant`, `tool`, `latest_reminder`
+#
+# Every request fails, so this map is not optional. It only names the roles
+# Agno already sends, mapping system back to the standard spelling.
+_DEEPSEEK_ROLE_MAP = {
+    "system": "system",
+    "user": "user",
+    "assistant": "assistant",
+    "tool": "tool",
+    "model": "assistant",
+}
 
-# Select primary model — Bedrock first, existing fallbacks untouched
-if bedrock_key:
-    llm_model = OpenAIChat(id=bedrock_model, api_key=bedrock_key, base_url=bedrock_url)
-elif xai_key:
-    llm_model = xAI(id="grok-4.20-0309-non-reasoning", api_key=xai_key)
+if core_config.DEEPSEEK_API_KEY:
+    llm_model = OpenAIChat(
+        id=core_config.DEEPSEEK_MODEL_ID or "deepseek-flash",
+        api_key=core_config.DEEPSEEK_API_KEY,
+        base_url=core_config.DEEPSEEK_BASE_URL.rstrip("/"),
+        role_map=_DEEPSEEK_ROLE_MAP,
+    )
+elif core_config.XAI_API_KEY:
+    llm_model = xAI(
+        id=core_config.XAI_MODEL_ID or "grok-4.6",
+        api_key=core_config.XAI_API_KEY,
+    )
+elif core_config.OPENAI_API_KEY:
+    llm_model = OpenAIChat(id="gpt-4o-mini", api_key=core_config.OPENAI_API_KEY)
 else:
-    llm_model = OpenAIChat(id="gpt-4o-mini", api_key=openai_key)
+    llm_model = OpenAIChat(
+        id=core_config.BEDROCK_MODEL_ID or "deepseek.v3.2",
+        api_key=core_config.BEDROCK_API_KEY,
+        base_url=core_config.BEDROCK_BASE_URL.rstrip("/"),
+    )
+
+print(f"[startup] text/voice model: {getattr(llm_model, 'id', '?')}")
+
+def _clean_agent_output(run_output) -> None:
+    """Strip leaked model control tokens from a finished reply.
+
+    guardrails.clean_output was already wired into all three other channels —
+    the Deepgram bridge (stream_agno_to_deepgram), the LiveKit worker, and the
+    AssemblyAI proxy's _ReplyCleaner — but never the AgentOS text path, so the
+    website chat was the one surface with no filter at all. Visitors saw
+    "<｜DSML｜function_calls" in the transcript.
+
+    Agno runs post_hooks after the content deltas have streamed, so this cannot
+    unsend a token mid-stream. It does fix the RunCompleted payload, which the
+    frontend uses to replace the message wholesale, plus the copied transcript
+    and the persisted session. With deepseek-flash primary the token is not
+    emitted at all; this is the guard for the Bedrock last resort, which does
+    emit it.
+
+    Never raises: a cleaning failure must not take down a reply.
+    """
+    try:
+        content = getattr(run_output, "content", None)
+        if isinstance(content, str) and content:
+            cleaned = guardrails.clean_output(content)
+            if cleaned != content:
+                run_output.content = cleaned
+    except Exception as e:
+        print(f"[guardrails] WARNING: could not clean agent output ({e})")
+
 
 # Prompts now come from core/persona.py — one identity, layered per channel.
 # The old inline prompt described a "general-purpose virtual assistant speaking
@@ -103,6 +182,7 @@ voice_agent = Agent(
     tools=_agent_tools,
     description=f"Clyde on the voice channel, for {core_config.OWNER_NAME}'s website.",
     instructions=[VOICE_AGENT_SYSTEM_PROMPT],
+    post_hooks=[_clean_agent_output],
     markdown=False,
     db=db,
     knowledge=_knowledge,
@@ -123,6 +203,7 @@ text_agent = Agent(
     tools=_agent_tools,
     description=f"Clyde answers questions about {core_config.OWNER_NAME} and books meetings.",
     instructions=[TEXT_AGENT_SYSTEM_PROMPT],
+    post_hooks=[_clean_agent_output],
     markdown=True,
     db=db,
     knowledge=_knowledge,
@@ -250,13 +331,98 @@ async def voice_token():
     return {"token": token, "session": session_config.build_session()}
 
 
+class LeadFormRequest(BaseModel):
+    """A lead typed into the chat form rather than dictated to the agent.
+
+    Lengths are capped at the edge. The model-driven path is bounded by what a
+    conversation plausibly contains; this endpoint is public and
+    unauthenticated like /api/voice/tool, so an open text field is an open text
+    field. Pydantic rejects anything longer before it reaches Postgres. The
+    frontend enforces the same limits in Zod so the two cannot drift.
+    """
+
+    name: str = Field("", max_length=200)
+    email: str = Field("", max_length=320)  # RFC 5321 maximum
+    company: str = Field("", max_length=200)
+    message: str = Field("", max_length=4000)
+    session_id: Optional[str] = Field(None, max_length=200)
+
+
+@base_app.post("/api/leads")
+async def submit_lead(req: LeadFormRequest, request: Request):
+    """Save a lead submitted through the chat form.
+
+    Returns {ok, message} rather than a bare string. The form branches on the
+    outcome to choose between a confirmation and a retry, and parsing prose to
+    discover whether a write succeeded is how silent data loss happens.
+
+    Validation is repeated here rather than trusted from the client: the
+    endpoint is reachable without the form.
+    """
+    # Public and unauthenticated: every accepted request writes a row and
+    # emails the owner, so the count has to be capped before any work happens.
+    retry_after = rate_limit.check(
+        request, rate_limit.LEADS_LIMIT, rate_limit.LEADS_WINDOW
+    )
+    if retry_after is not None:
+        return JSONResponse(
+            status_code=429,
+            headers={"Retry-After": str(retry_after)},
+            content={
+                "ok": False,
+                "message": "That's a few too many submissions — give it a minute and try again.",
+            },
+        )
+
+    name = req.name.strip()
+    email = req.email.strip()
+
+    # Same floor as capture_lead: something to identify them by.
+    if not (name or email):
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "message": "Add your name or your email."},
+        )
+    if email and not core_leads._valid_email(email):
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "message": "That email doesn't look right."},
+        )
+
+    result = await core_leads.capture_lead(
+        name=name,
+        email=email,
+        company=req.company.strip(),
+        intent="chat form",
+        message=req.message.strip(),
+        session_id=req.session_id,
+        # Distinct from the model-driven source="text": these were typed by the
+        # visitor, not transcribed by the model, so they stay attributable.
+        source="text-form",
+    )
+
+    payload = ui_payload.extract(result) or {}
+    saved = payload.get("type") == "lead_saved"
+    return {
+        "ok": saved,
+        "lead_id": payload.get("lead_id"),
+        # On failure capture_lead's own sentence is the useful message; it
+        # already explains what went wrong in plain English.
+        "message": (
+            "Thanks — your details are with Gichogu and he'll be in touch."
+            if saved
+            else ui_payload.strip_payload(result)
+        ),
+    }
+
+
 class VoiceToolRequest(BaseModel):
     name: str
     arguments: dict = {}
 
 
 @base_app.post("/api/voice/tool")
-async def voice_tool(req: VoiceToolRequest):
+async def voice_tool(req: VoiceToolRequest, request: Request):
     """Run a tool the agent asked for and return the result.
 
     The browser relays tool.call here because the tools need the database, the
@@ -264,6 +430,17 @@ async def voice_tool(req: VoiceToolRequest):
     text rather than errors — the agent reads the result aloud and recovers,
     where a 500 would leave the visitor in silence.
     """
+    # Same exposure as /api/leads. The ceiling is high enough that a real
+    # conversation never reaches it, and the failure stays speakable so the
+    # agent recovers out loud rather than going silent.
+    if rate_limit.check(
+        request, rate_limit.VOICE_TOOL_LIMIT, rate_limit.VOICE_TOOL_WINDOW
+    ) is not None:
+        return {
+            "result": "That tool is being called too quickly. Tell the visitor "
+            "to try again in a moment and carry on."
+        }
+
     result = await voice_tools.dispatch(req.name, req.arguments)
     return {"result": result}
 

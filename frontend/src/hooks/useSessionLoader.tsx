@@ -3,7 +3,6 @@ import { getSessionAPI, getAllSessionsAPI } from '@/api/os'
 import { useStore } from '../store'
 import { toast } from 'sonner'
 import { ChatMessage, ToolCall, ReasoningMessage, ChatEntry } from '@/types/os'
-import { getJsonMarkdown } from '@/lib/utils'
 
 interface SessionResponse {
   session_id: string
@@ -145,11 +144,12 @@ const useSessionLoader = () => {
                     content: textContent
                   }
                 }
+                // A stored message whose content is not a string is protocol
+                // data, not something a visitor should read. This used to be
+                // dumped into the bubble as a ```json block, which rendered an
+                // empty "{}" for every tool call (tool messages carry `{}`).
                 if (typeof message.content !== 'string') {
-                  return {
-                    ...message,
-                    content: getJsonMarkdown(message.content)
-                  }
+                  return { ...message, content: '' }
                 }
                 return message
               }

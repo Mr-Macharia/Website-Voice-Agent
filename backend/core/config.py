@@ -98,6 +98,16 @@ KNOWLEDGE_TOP_K = _get_int("KNOWLEDGE_TOP_K", 4)
 # --- Cal.com --------------------------------------------------------------
 # The public booking page. The agent hands this over rather than reading
 # availability through the API — see core/tools/booking.py for why.
+# --- Rate limiting -------------------------------------------------------
+# `/api/leads` and `/api/voice/tool` are public and unauthenticated. These cap
+# how often one client may hit them. Generous by design: a visitor submits the
+# lead form once, and a voice turn makes a handful of tool calls.
+LEADS_RATE_LIMIT = _get_int("LEADS_RATE_LIMIT", 5) or 5
+LEADS_RATE_WINDOW = _get_int("LEADS_RATE_WINDOW", 300) or 300
+VOICE_TOOL_RATE_LIMIT = _get_int("VOICE_TOOL_RATE_LIMIT", 60) or 60
+VOICE_TOOL_RATE_WINDOW = _get_int("VOICE_TOOL_RATE_WINDOW", 60) or 60
+
+
 CALCOM_BOOKING_URL = _get(
     "CALCOM_BOOKING_URL", "https://cal.com/macharia/ai-and-automation-consultation"
 )

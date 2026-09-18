@@ -11,6 +11,11 @@ import {
 import React, { type FC } from 'react'
 import ChatBlankState from './ChatBlankState'
 import { Wrench, BrainCircuit, BookOpen } from 'lucide-react'
+import { parseToolPayload, toolResultText } from '@/lib/toolPayload'
+import { BookingCard } from './tools/BookingCard'
+import { LeadForm } from './tools/LeadForm'
+import { useStore } from '@/store'
+import { useQueryState } from 'nuqs'
 
 interface MessageListProps {
   messages: ChatMessage[]
@@ -123,10 +128,72 @@ const AgentMessageWrapper = ({ message }: MessageWrapperProps) => {
         </div>
       )}
 
+      <ToolCards message={message} />
+
       <AgentMessage message={message} />
     </div>
   )
 }
+
+/**
+ * Interactive components rendered from a tool's structured payload.
+ *
+ * The tool's return value reaches the client on the run stream's `result`
+ * field (and on `content` when a stored session is replayed), which
+ * `toolResultText` resolves. Anything without a payload keeps rendering as the
+ * pill above, so this is additive.
+ */
+const ToolCards = memo(({ message }: { message: ChatMessage }) => {
+  const selectedEndpoint = useStore((s) => s.selectedEndpoint)
+  // The session lives in the URL, as useAIStreamHandler reads it.
+  const [sessionId] = useQueryState('session')
+
+  const cards = (message.tool_calls ?? [])
+    .map((toolCall, index) => ({
+      key:
+        toolCall.tool_call_id ||
+        `${toolCall.tool_name}-${toolCall.created_at}-${index}`,
+      payload: parseToolPayload(toolResultText(toolCall))
+    }))
+    .filter((c) => c.payload !== null)
+
+  if (cards.length === 0) return null
+
+  return (
+    <div className="flex w-full flex-col items-start gap-2">
+      {cards.map(({ key, payload }) => {
+        if (payload?.type === 'booking') {
+          // Wider than the text column, unlike every other bubble. The column
+          // is max-w-3xl (768px), which is exactly Cal's mobile breakpoint --
+          // at that width it stacks the slot list under the calendar. The
+          // negative margins let the card breathe past the column on screens
+          // that have the room, and collapse to 0 on small ones.
+          return (
+            <div
+              key={key}
+              className="w-full lg:-mx-16 lg:w-[calc(100%+8rem)] xl:-mx-24 xl:w-[calc(100%+12rem)]"
+            >
+              <BookingCard payload={payload} />
+            </div>
+          )
+        }
+        if (payload?.type === 'lead_form') {
+          return (
+            <div key={key} className="w-full max-w-[88%]">
+              <LeadForm
+                payload={payload}
+                endpoint={`${selectedEndpoint || 'http://localhost:7777'}/api/leads`}
+                sessionId={sessionId}
+              />
+            </div>
+          )
+        }
+        return null
+      })}
+    </div>
+  )
+})
+ToolCards.displayName = 'ToolCards'
 
 const Reasoning: FC<ReasoningStepProps> = ({ index, stepTitle }) => (
   <div className="flex items-center gap-2 text-xs text-zinc-300">
@@ -156,6 +223,7 @@ const TOOL_LABELS: Record<string, string> = {
   search_web: 'Searching the web',
   get_available_slots: 'Checking availability',
   book_meeting: 'Booking the meeting',
+  get_booking_link: 'Getting the booking link',
   capture_lead: 'Saving your details'
 }
 

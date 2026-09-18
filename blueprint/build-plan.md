@@ -39,6 +39,6 @@
        features (persistence, knowledge, booking, leads, gmail) are actually
        configured and live
 
-No unchecked roadmap items yet. Add the next one when you have a specific fix
-or feature to spec — for now the stated direction is stabilizing and debugging
-what's already built.
+- [ ] 14. **Interactive tool rendering** - booking card and lead-capture form
+       rendered from tool results in text chat, replacing prose-only tool output
+       (`frontend/src/components/chat/ChatArea/Messages/`, `core/tools/`)

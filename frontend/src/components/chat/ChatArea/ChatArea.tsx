@@ -1,5 +1,6 @@
 'use client'
 
+import { stripToolPayload } from '@/lib/toolPayload'
 import React, { useState } from 'react'
 import ChatInput from './ChatInput'
 import MessageArea from './MessageArea'
@@ -28,7 +29,10 @@ const ChatAreaHeader = () => {
       return
     }
     const formatted = messages
-      .map((m) => `${m.role === 'user' ? 'You' : agentName}: ${m.content}`)
+      .map(
+        (m) =>
+          `${m.role === 'user' ? 'You' : agentName}: ${stripToolPayload(m.content)}`
+      )
       .join('\n\n')
     navigator.clipboard.writeText(formatted)
     setCopied(true)

@@ -15,6 +15,7 @@ import logging
 from livekit.agents import function_tool
 
 from core import config
+from core import ui_payload
 from core.tools import about as _about
 from core.tools import booking as _booking
 from core.tools import leads as _leads
@@ -56,7 +57,8 @@ async def get_booking_link() -> str:
     availability. Give them the link and say briefly what the session is for.
     Do not invent specific times — the page shows his real availability.
     """
-    return await _booking.get_booking_link()
+    # Spoken aloud, so drop any UI payload meant for the text chat.
+    return ui_payload.strip_payload(await _booking.get_booking_link())
 
 
 @function_tool
@@ -79,13 +81,16 @@ async def capture_lead(
         intent: Short label for what they want, e.g. "hiring", "collaboration".
         message: Anything else worth passing on, in their own words.
     """
-    return await _leads.capture_lead(
-        name=name,
-        email=email,
-        company=company,
-        intent=intent,
-        message=message,
-        source="voice",
+    # Spoken aloud, so drop any UI payload meant for the text chat.
+    return ui_payload.strip_payload(
+        await _leads.capture_lead(
+            name=name,
+            email=email,
+            company=company,
+            intent=intent,
+            message=message,
+            source="voice",
+        )
     )
 
 

@@ -21,6 +21,7 @@ import logging
 from typing import Any, Awaitable, Callable
 
 from core import config
+from core import ui_payload
 from core.tools import about as _about
 from core.tools import booking as _booking
 from core.tools import gmail as _gmail
@@ -271,7 +272,10 @@ async def dispatch(name: str, arguments: dict[str, Any]) -> str:
         result = handler(**(arguments or {}))
         if inspect.isawaitable(result):
             result = await result
-        return str(result)
+        # Tools may append a UI payload for the text chat to render a card or
+        # form from. Voice has no components and reads this string aloud, so
+        # the marker is stripped here rather than spoken.
+        return ui_payload.strip_payload(str(result))
     except TypeError as e:
         # Wrong or missing arguments — recoverable by asking again.
         logger.warning("Bad arguments for %s: %s", name, e)
