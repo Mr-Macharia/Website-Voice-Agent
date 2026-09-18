@@ -20,6 +20,7 @@ localhost is rejected. Local development points at the deployed instance.
 
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import re
@@ -71,6 +72,17 @@ def _providers() -> list[dict]:
             "model": config.XAI_MODEL_ID or "grok-4.6",
         })
 
+    if config.DEEPSEEK_API_KEY:
+        out.append({
+            "name": "deepseek",
+            "base_url": config.DEEPSEEK_BASE_URL.rstrip("/"),
+            "api_key": config.DEEPSEEK_API_KEY,
+            "model": config.DEEPSEEK_MODEL_ID or "deepseek-flash",
+            # V4 is a thinking model with a non-standard requirement, see
+            # _apply_provider_quirks.
+            "needs_reasoning_echo": True,
+        })
+
     if config.OPENAI_API_KEY:
         out.append({
             "name": "openai",
@@ -88,6 +100,49 @@ def _providers() -> list[dict]:
         })
 
     return out
+
+
+def _apply_provider_quirks(body: dict, provider: dict) -> dict:
+    """Adjust the request for a provider that deviates from the OpenAI shape.
+
+    DeepSeek V4 (deepseek-flash, deepseek-v4-pro) is a thinking model: every
+    tool call it returns carries a `reasoning_content` field, and the API then
+    REJECTS any follow-up whose assistant turn omits it —
+
+        The `reasoning_content` in the thinking mode must be passed back to
+        the API.
+
+    That is a DeepSeek extension, not part of the OpenAI schema. AssemblyAI's
+    orchestrator builds the message list and sends plain OpenAI-format turns,
+    so it never echoes the field and every post-tool-call turn 400s. The visitor
+    hears nothing at all.
+
+    An empty string satisfies the check (verified against the live API), so the
+    proxy fills it in where it is missing. We do not reconstruct the model's
+    actual reasoning: it is not ours to store, it would have to survive a round
+    trip through AssemblyAI, and it is never spoken.
+    """
+    if not provider.get("needs_reasoning_echo"):
+        return body
+
+    messages = body.get("messages")
+    if not isinstance(messages, list):
+        return body
+
+    patched = False
+    for msg in messages:
+        if (
+            isinstance(msg, dict)
+            and msg.get("role") == "assistant"
+            and msg.get("tool_calls")
+            and "reasoning_content" not in msg
+        ):
+            msg["reasoning_content"] = ""
+            patched = True
+
+    if patched:
+        logger.debug("Added reasoning_content for %s", provider["name"])
+    return body
 
 
 def authorized(auth_header: str | None) -> bool:
@@ -262,8 +317,9 @@ async def stream_completion(payload: dict) -> AsyncIterator[bytes]:
     last_error: Exception | None = None
 
     for provider in providers:
-        body = dict(payload)
+        body = copy.deepcopy(payload)
         body["model"] = provider["model"]
+        body = _apply_provider_quirks(body, provider)
         # Voice needs tokens as they are generated, never a single blob at the
         # end — buffering turns reply latency into whole-turn latency.
         body["stream"] = True
