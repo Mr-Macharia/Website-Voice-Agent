@@ -119,6 +119,9 @@ LEAD_SMTP_APP_PASSWORD = _get("LEAD_SMTP_APP_PASSWORD")
 
 # --- LLM (unchanged from existing behaviour) ------------------------------
 XAI_API_KEY = _get("XAI_API_KEY")
+# grok-4.6 is the voice default: it calls tools reliably with conversation
+# history present, which deepseek.v3.2 does not (see voice/llm_proxy.py).
+XAI_MODEL_ID = _get("XAI_MODEL_ID", "grok-4.6")
 OPENAI_API_KEY = _get("OPENAI_API_KEY")
 BEDROCK_BASE_URL = _get("BEDROCK_BASE_URL", "https://bedrock-mantle.us-east-1.api.aws/v1")
 BEDROCK_API_KEY = _get("BEDROCK_API_KEY")

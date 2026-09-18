@@ -39,20 +39,36 @@ _TIMEOUT = httpx.Timeout(connect=5.0, read=60.0, write=10.0, pool=5.0)
 def _providers() -> list[dict]:
     """Upstreams in priority order, best first.
 
-    Order and model choices carry over from livekit_worker._create_llm(),
-    including its hard-won note: nemotron-nano-3-30b could not reliably emit
-    tool calls once the chat had any history — it printed 'search_web(...)' as
-    literal text or invented the answer outright. Don't substitute models here
-    without testing tool calls with conversation history present.
+    xAI leads, not Bedrock/DeepSeek. Measured against the Voice Agent API's
+    tool-calling protocol:
+
+      - deepseek.v3.2 given a tool it clearly should use emitted ZERO tool
+        calls and answered from nothing. Handed a completed tool result, it
+        replied with the malformed control token "<|DSML|function_calls"
+        instead of an answer. Live, it spoke AssemblyAI's own orchestration
+        instructions aloud to visitors ("Do not comment on the tool's
+        existence...", "Use the reply box to speak to the person...") — the
+        model failing the protocol and spilling the rules instead of following
+        them.
+      - grok-4.6, grok-4.5 and grok-4.20-non-reasoning all called the tool
+        correctly with no spoken text, and turned a tool result into a clean
+        two-sentence spoken answer.
+
+    This is the same class of defect the LiveKit worker recorded for
+    nemotron-nano-3-30b, which printed 'search_web(...)' as literal text.
+    Tool calling with conversation history is the thing to test before
+    changing a model here; latency is secondary.
+
+    DeepSeek stays as a last resort so voice still answers if xAI is down.
     """
     out: list[dict] = []
 
-    if config.BEDROCK_API_KEY:
+    if config.XAI_API_KEY:
         out.append({
-            "name": "bedrock",
-            "base_url": config.BEDROCK_BASE_URL.rstrip("/"),
-            "api_key": config.BEDROCK_API_KEY,
-            "model": config.BEDROCK_MODEL_ID or "deepseek.v3.2",
+            "name": "xai",
+            "base_url": "https://api.x.ai/v1",
+            "api_key": config.XAI_API_KEY,
+            "model": config.XAI_MODEL_ID or "grok-4.6",
         })
 
     if config.OPENAI_API_KEY:
@@ -63,12 +79,12 @@ def _providers() -> list[dict]:
             "model": "gpt-4o-mini",
         })
 
-    if config.XAI_API_KEY:
+    if config.BEDROCK_API_KEY:
         out.append({
-            "name": "xai",
-            "base_url": "https://api.x.ai/v1",
-            "api_key": config.XAI_API_KEY,
-            "model": "grok-4.20-0309-non-reasoning",
+            "name": "bedrock",
+            "base_url": config.BEDROCK_BASE_URL.rstrip("/"),
+            "api_key": config.BEDROCK_API_KEY,
+            "model": config.BEDROCK_MODEL_ID or "deepseek.v3.2",
         })
 
     return out
