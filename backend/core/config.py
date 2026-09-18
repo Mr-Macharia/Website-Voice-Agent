@@ -118,6 +118,13 @@ LEAD_SMTP_USER = _get("LEAD_SMTP_USER")
 LEAD_SMTP_APP_PASSWORD = _get("LEAD_SMTP_APP_PASSWORD")
 
 # --- LLM (unchanged from existing behaviour) ------------------------------
+# DeepSeek's own API (not the Bedrock-hosted deepseek.v3.2, which could not
+# emit tool calls — see voice/llm_proxy.py). deepseek-flash is V4.1-Flash, a
+# different generation, and does advertise tool-call support.
+DEEPSEEK_API_KEY = _get("DEEPSEEK_API_KEY")
+DEEPSEEK_BASE_URL = _get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+DEEPSEEK_MODEL_ID = _get("DEEPSEEK_MODEL_ID", "deepseek-flash")
+
 XAI_API_KEY = _get("XAI_API_KEY")
 # grok-4.6 is the voice default: it calls tools reliably with conversation
 # history present, which deepseek.v3.2 does not (see voice/llm_proxy.py).
