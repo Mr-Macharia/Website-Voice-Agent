@@ -132,6 +132,17 @@ BEDROCK_MODEL_ID = _get("BEDROCK_MODEL_ID", "deepseek.v3.2")
 # The browser never sees ASSEMBLYAI_API_KEY. It calls /api/voice/token, which
 # mints a short-lived single-use token server-side.
 ASSEMBLYAI_API_KEY = _get("ASSEMBLYAI_API_KEY")
+# A stored agent, created by scripts/provision_agent.py.
+#
+# This is not the shape originally planned. Configuring everything inline per
+# session would have avoided a provisioning step, but the API rejects a custom
+# `llm` on session.update — "BYO LLM config is not allowed on session.update;
+# define it on a stored agent via POST /v1/agents". Since keeping our own LLM
+# is the point of the migration, the agent has to be stored.
+#
+# agent_id is mutually exclusive with every inline field, so the prompt, voice,
+# tools and turn detection all live on the stored agent too.
+ASSEMBLYAI_AGENT_ID = _get("ASSEMBLYAI_AGENT_ID")
 # Voice IDs are exact strings and are rejected at session.update if wrong.
 # Current catalog: alba, eve, george, jane, jean, mary, michael (US);
 # anna, charles, paul, vera (UK). See core/persona.py for the tone this matches.
@@ -181,7 +192,12 @@ def voice_available() -> bool:
     AssemblyAI accepts only one llm entry. Without a public proxy URL the
     agent would connect and then be unable to say anything.
     """
-    return bool(ASSEMBLYAI_API_KEY and LLM_PROXY_URL and llm_available())
+    return bool(
+        ASSEMBLYAI_API_KEY
+        and ASSEMBLYAI_AGENT_ID
+        and LLM_PROXY_URL
+        and llm_available()
+    )
 
 
 def llm_available() -> bool:
@@ -201,6 +217,7 @@ def missing_for(feature: str) -> list[str]:
         "gmail": {"COMPOSIO_API_KEY": COMPOSIO_API_KEY},
         "voice": {
             "ASSEMBLYAI_API_KEY": ASSEMBLYAI_API_KEY,
+            "ASSEMBLYAI_AGENT_ID": ASSEMBLYAI_AGENT_ID,
             "LLM_PROXY_URL": LLM_PROXY_URL,
         },
         "lead_notification": {

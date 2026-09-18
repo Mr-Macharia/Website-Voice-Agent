@@ -1,14 +1,19 @@
-"""The session.update payload sent when a browser opens a voice session.
+"""The stored agent's definition, and the session that binds to it.
 
-The agent is configured *inline* per session rather than provisioned as a
-stored agent. That means no agent_id to keep in sync, no drift between what is
-committed here and what lives on AssemblyAI's servers, and changing the persona
-is an ordinary deploy. With low session volume there is nothing to gain from
-provisioning.
+Originally this built a full inline `session.update`, which needs no
+provisioning step. That is not possible here: the API rejects a custom `llm`
+inline —
 
-The prompt lives in Python but is sent by the browser, so /api/voice/token
-returns this config alongside the token and the browser forwards it verbatim.
-core/persona.py stays the single source of truth.
+    BYO LLM config is not allowed on session.update;
+    define it on a stored agent via POST /v1/agents
+
+and keeping our own LLM is the whole point of the migration. So the agent is
+stored, created by scripts/provision_agent.py from build_agent() below.
+
+`agent_id` is mutually exclusive with every inline field, so the prompt, voice,
+tools and turn detection all live on the stored agent. The browser sends only
+the id. core/persona.py is still the single source of truth — provisioning
+reads from it, so changing the persona means a deploy plus a re-provision.
 """
 
 from __future__ import annotations
@@ -33,8 +38,8 @@ _KEYTERMS = [
 ]
 
 
-def build_session() -> dict:
-    """The `session` object for session.update.
+def build_agent() -> dict:
+    """The POST/PUT /v1/agents body.
 
     Turn detection is deliberately almost unconfigured. AssemblyAI's default is
     semantic — it decides the visitor has finished from what they said, not
@@ -44,10 +49,12 @@ def build_session() -> dict:
     and only because barge-in is central to the experience.
     """
     return {
+        "name": f"{config.OWNER_NAME} site assistant",
         "system_prompt": persona.for_voice(),
         # Fixed text, never generated. See persona.GREETING for why: a
         # generated greeting leaked instruction text into live sessions.
         "greeting": persona.GREETING,
+        "voice": {"voice_id": config.ASSEMBLYAI_VOICE},
         "tools": tools.get_tool_schemas(),
         "input": {
             "format": {"encoding": "audio/pcm", "sample_rate": SAMPLE_RATE},
@@ -68,6 +75,15 @@ def build_session() -> dict:
     }
 
 
+def build_session() -> dict:
+    """The `session` object the browser sends as its first message.
+
+    Just the id: binding to a stored agent and also sending any inline field is
+    rejected outright.
+    """
+    return {"agent_id": config.ASSEMBLYAI_AGENT_ID}
+
+
 def _llm_config() -> list[dict]:
     """Point the agent at our own LLM proxy.
 
@@ -80,15 +96,14 @@ def _llm_config() -> list[dict]:
     An empty list means "use AssemblyAI's managed model". We never want that
     silently: the managed model knows nothing about the owner and would answer
     from its own memory, which is exactly the failure persona._GROUNDING exists
-    to prevent. Callers check config.voice_available() first.
+    to prevent. Provisioning refuses to write an agent without it.
     """
     if not (config.LLM_PROXY_URL and config.LLM_PROXY_SECRET):
         return []
 
-    base_url = config.LLM_PROXY_URL.rstrip("/")
     return [
         {
-            "base_url": base_url,
+            "base_url": config.LLM_PROXY_URL.rstrip("/"),
             # The proxy decides the real upstream model; this is the name it
             # receives and is free to override.
             "model": config.BEDROCK_MODEL_ID or "deepseek.v3.2",

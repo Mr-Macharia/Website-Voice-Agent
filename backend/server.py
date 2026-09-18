@@ -198,6 +198,18 @@ async def voice_token():
             detail="Voice isn't configured. ASSEMBLYAI_API_KEY is missing.",
         )
 
+    # The agent must be stored, not configured inline: the API rejects a custom
+    # llm on session.update, and the managed model it would otherwise fall back
+    # to knows nothing about the owner. Run scripts/provision_agent.py.
+    if not core_config.ASSEMBLYAI_AGENT_ID:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Voice isn't configured. ASSEMBLYAI_AGENT_ID is missing — run "
+                "scripts/provision_agent.py to create the stored agent."
+            ),
+        )
+
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.get(
@@ -231,17 +243,7 @@ async def voice_token():
     if not token:
         raise HTTPException(status_code=502, detail="Voice service returned no token.")
 
-    session = session_config.build_session()
-    if not session.get("llm"):
-        # Empty llm means AssemblyAI's managed model, which knows nothing about
-        # the owner and would answer from its own memory — the exact failure
-        # persona._GROUNDING exists to prevent. Refuse rather than ship that.
-        raise HTTPException(
-            status_code=503,
-            detail="Voice isn't configured. LLM_PROXY_URL and LLM_PROXY_SECRET are required.",
-        )
-
-    return {"token": token, "session": session}
+    return {"token": token, "session": session_config.build_session()}
 
 
 class VoiceToolRequest(BaseModel):
