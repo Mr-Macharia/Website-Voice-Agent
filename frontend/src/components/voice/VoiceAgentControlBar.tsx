@@ -3,6 +3,7 @@
 import React from 'react'
 import { Button } from '@/components/ui/button'
 import { Mic, MicOff, PhoneOff, Sparkles, Zap, Radio } from 'lucide-react'
+import { DEFAULT_AGENT_NAME, VOICE_MODE_LABEL } from '@/lib/agentIdentity'
 
 interface VoiceAgentControlBarProps {
   isMuted: boolean
@@ -18,8 +19,8 @@ export const VoiceAgentControlBar: React.FC<VoiceAgentControlBarProps> = ({
   onToggleMute,
   onDisconnect,
   isConnected,
-  agentName = 'Clyde',
-  mode = 'Portfolio voice agent'
+  agentName = DEFAULT_AGENT_NAME,
+  mode = VOICE_MODE_LABEL
 }) => {
   const isLiveKit = mode.toLowerCase().includes('livekit')
 

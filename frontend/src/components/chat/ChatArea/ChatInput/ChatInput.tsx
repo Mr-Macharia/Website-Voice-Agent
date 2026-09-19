@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import { TextArea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { useStore } from '@/store'
+import { DEFAULT_AGENT_NAME } from '@/lib/agentIdentity'
 import useAIChatStreamHandler from '@/hooks/useAIStreamHandler'
 import { useQueryState } from 'nuqs'
 import Icon from '@/components/ui/icon'
@@ -21,7 +22,7 @@ const ChatInput = () => {
   const isStreaming = useStore((state) => state.isStreaming)
 
   const activeAgentName =
-    agents.find((a) => a.id === selectedAgent)?.name || 'Clyde'
+    agents.find((a) => a.id === selectedAgent)?.name || DEFAULT_AGENT_NAME
 
   const handleSubmit = async () => {
     if (!inputMessage.trim()) return

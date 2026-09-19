@@ -24,6 +24,7 @@ import {
 import { useStore } from '@/store'
 import { CLOSE, OPEN, type ToolPayload } from '@/lib/toolPayload'
 import { BookingCard } from '../chat/ChatArea/Messages/tools/BookingCard'
+import { DEFAULT_AGENT_NAME, VOICE_MODE_LABEL } from '@/lib/agentIdentity'
 
 import { VoiceAgentControlBar } from './VoiceAgentControlBar'
 import { VoiceVisualizer, type VoiceState } from './VoiceVisualizer'
@@ -56,7 +57,7 @@ interface Turn {
 export const AssemblyAIVoiceModal: React.FC<AssemblyAIVoiceModalProps> = ({
   isOpen,
   onClose,
-  agentName = 'Clyde'
+  agentName = DEFAULT_AGENT_NAME
 }) => {
   const { selectedEndpoint, setMessages } = useStore()
 
@@ -274,7 +275,7 @@ export const AssemblyAIVoiceModal: React.FC<AssemblyAIVoiceModalProps> = ({
                 <div className="flex items-center gap-2">
                   <Radio className="size-4 text-sky-400" />
                   <span className="font-mono text-xs font-medium text-zinc-200">
-                    Portfolio voice agent
+                    {VOICE_MODE_LABEL}
                   </span>
                 </div>
               </div>
@@ -367,7 +368,7 @@ export const AssemblyAIVoiceModal: React.FC<AssemblyAIVoiceModalProps> = ({
               onToggleMute={toggleMute}
               onDisconnect={handleClose}
               agentName={agentName}
-              mode="Portfolio voice agent"
+              mode={VOICE_MODE_LABEL}
             />
           </div>
         )}

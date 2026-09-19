@@ -7,20 +7,6 @@
 > finding is `open` or `fixed`, then archives resolved findings with the work
 > and resets this file.
 
-### F-04 [P3] open - "Portfolio voice agent" is duplicated as a literal in three places
-
-**File:** frontend/src/components/voice/AssemblyAIVoiceModal.tsx:204
-**Found:** 2026-09-18 by /audit (scope: changed; lens: quality)
-**Why it matters:** The same display string is hardcoded at
-`AssemblyAIVoiceModal.tsx:204`, `AssemblyAIVoiceModal.tsx:287`, and as the
-default at `VoiceAgentControlBar.tsx:22`. The next copy edit has to find all
-three, and missing one splits the label between the modal header and the
-control bar. Minor, but the identical `agentName = 'Clyde'` default is now
-duplicated across two components for the same reason.
-**Suggested fix:** Lift both strings into a shared constant near the voice
-components and import it. Not urgent.
-**Resolution:**
-
 ### F-06 [P3] open - LeadForm inlines a backend fetch instead of using src/api
 
 **File:** frontend/src/components/chat/ChatArea/Messages/tools/LeadForm.tsx:92
@@ -84,4 +70,24 @@ which `lib/calEmbed.ts:54-67` already builds the queue machinery for. Cheaper
 alternative: render the inline calendar only in the card that is actually
 visible and let the mirrored chat copy be link-only, since its job is to leave a
 written record rather than to be booked from twice.
+**Resolution:**
+
+### F-09 [P3] open - The voice control bar derives behavior from a display string
+
+**File:** frontend/src/components/voice/VoiceAgentControlBar.tsx:26
+**Found:** 2026-09-20 by /audit (scope: current; lens: quality)
+**Why it matters:** `const isLiveKit = mode.toLowerCase().includes('livekit')`
+makes one prop do two jobs: `mode` is rendered verbatim to the visitor at line
+60, and it is simultaneously parsed to choose which icon to show. The three
+values passed today (`VOICE_MODE_LABEL`, `"LiveKit WebRTC"`, `"LiveKit voice"`)
+all resolve correctly, so this is not a live bug. But the coupling is invisible
+from the call sites: centralizing the label in `VOICE_MODE_LABEL` (this fix)
+means a future copy edit happens in `lib/agentIdentity.ts`, one file removed
+from the substring test that depends on it. Renaming the label to something
+containing "livekit", or renaming the LiveKit modes to drop it, silently
+switches the icon with no type error and nothing failing.
+**Suggested fix:** Pass the transport as its own prop — for example
+`transport?: 'livekit' | 'assemblyai'` — and keep `mode` purely for display.
+Small and local: three call sites and one component. Not urgent, and out of
+scope for the F-04 fix, which only moved literals.
 **Resolution:**

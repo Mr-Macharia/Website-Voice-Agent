@@ -208,4 +208,15 @@ the EU region measured ~0.72s against ~1.27s for US-East. Heroku cannot move an
 app between regions — it means a new app.
 
 Current deployment: `gichogu-voice-eu` (EU), agent
-`agent_f3981a8d50954289813c4e77b0dcfd29`.
+`agent_0a71a44406c145f190c6317b1b30a870`.
+
+The agent ID is not a constant: `ASSEMBLYAI_AGENT_ID` in `.env` is the single
+source of truth, and re-running `scripts/provision_agent.py` creates a *new*
+agent rather than updating the old one. List what actually exists with
+
+    curl -H "Authorization: $ASSEMBLYAI_API_KEY" https://agents.assemblyai.com/v1/agents
+
+Note the host: `agents.assemblyai.com`, not `api.assemblyai.com`, which returns
+404 for this path and looks exactly like a deleted agent. `GET /v1/agents/{id}`
+is also unreliable — it has returned 404 for agents that the list shows exist,
+so trust the list.

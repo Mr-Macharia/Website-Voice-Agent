@@ -1,6 +1,7 @@
 'use client'
 
 import { stripToolPayload } from '@/lib/toolPayload'
+import { DEFAULT_AGENT_NAME } from '@/lib/agentIdentity'
 import React, { useState } from 'react'
 import ChatInput from './ChatInput'
 import MessageArea from './MessageArea'
@@ -21,7 +22,8 @@ const ChatAreaHeader = () => {
   const [copied, setCopied] = useState(false)
 
   const activeAgent = agents.find((a) => a.id === agentId)
-  const agentName = activeAgent?.name || (teamId ? `Team: ${teamId}` : 'Clyde')
+  const agentName =
+    activeAgent?.name || (teamId ? `Team: ${teamId}` : DEFAULT_AGENT_NAME)
 
   const copyFullConversation = () => {
     if (messages.length === 0) {
