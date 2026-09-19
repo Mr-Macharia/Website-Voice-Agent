@@ -21,6 +21,7 @@ import { Button } from '@/components/ui/button'
 import { useStore } from '@/store'
 import VoiceVisualizer, { VoiceState } from './VoiceVisualizer'
 import VoiceAgentControlBar from './VoiceAgentControlBar'
+import { DEFAULT_AGENT_NAME, VOICE_MODE_LABEL } from '@/lib/agentIdentity'
 import {
   RefreshCw,
   Send,
@@ -315,9 +316,7 @@ const DirectVoiceSession: React.FC<{
   const [showHistory, setShowHistory] = useState(false)
   const [copied, setCopied] = useState(false)
   const [history, setHistory] = useState<ConversationTurn[]>([])
-  const [statusMessage, setStatusMessage] = useState(
-    'Connecting...'
-  )
+  const [statusMessage, setStatusMessage] = useState('Connecting...')
 
   const wsRef = useRef<WebSocket | null>(null)
   const audioCtxRef = useRef<AudioContext | null>(null)
@@ -386,7 +385,9 @@ const DirectVoiceSession: React.FC<{
   // and play TTS ("two voices"). Web Lock auto-releases when the holder tab
   // closes; no heartbeat needed. Falls back to single-session on browsers
   // without the Locks API.
-  const [tabLock, setTabLock] = useState<'checking' | 'held' | 'busy'>('checking')
+  const [tabLock, setTabLock] = useState<'checking' | 'held' | 'busy'>(
+    'checking'
+  )
   useEffect(() => {
     let cancelled = false
     let release: (() => void) | null = null
@@ -648,7 +649,9 @@ const DirectVoiceSession: React.FC<{
 
     // Keep 50ms floor (800 samples @16k) so "yes"/"no" not dropped, but confident turns <400ms still filtered if silence-triggered
     if (downsampled.length < 800) {
-      console.debug(`[VAD] Dropped sub-floor turn (${downsampled.length} samples)`)
+      console.debug(
+        `[VAD] Dropped sub-floor turn (${downsampled.length} samples)`
+      )
       return
     }
     // If total speech <400ms (6400 samples) and triggered by silence, likely false trigger — keep but log
@@ -690,7 +693,9 @@ const DirectVoiceSession: React.FC<{
     if (tabLock === 'checking') return
     if (tabLock === 'busy') {
       setVoiceState('error')
-      setStatusMessage('Voice already active in another tab — close it there first.')
+      setStatusMessage(
+        'Voice already active in another tab — close it there first.'
+      )
       return
     }
     let isMounted = true
@@ -1323,7 +1328,7 @@ const DirectVoiceSession: React.FC<{
           <div className="flex items-center gap-2">
             <Zap className="size-4 text-[#f48c06]" />
             <span className="font-mono text-xs font-medium text-zinc-200">
-              Portfolio voice agent
+              {VOICE_MODE_LABEL}
             </span>
             <span className="rounded-full border border-[#f48c06]/20 bg-[#f48c06]/10 px-2.5 py-0.5 font-mono text-[10px] text-[#faa307]">
               Speech to speech
@@ -1595,7 +1600,7 @@ const DirectVoiceSession: React.FC<{
 export const LiveKitVoiceModal: React.FC<LiveKitVoiceModalProps> = ({
   isOpen,
   onClose,
-  agentName = 'Clyde'
+  agentName = DEFAULT_AGENT_NAME
 }) => {
   const [token, setToken] = useState<string>('')
   const [wsUrl, setWsUrl] = useState<string>('')

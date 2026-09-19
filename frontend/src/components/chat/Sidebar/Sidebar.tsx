@@ -2,6 +2,7 @@
 import { Button } from '@/components/ui/button'
 import useChatActions from '@/hooks/useChatActions'
 import { useStore } from '@/store'
+import { DEFAULT_AGENT_NAME } from '@/lib/agentIdentity'
 import { motion } from 'framer-motion'
 import { useState, useEffect } from 'react'
 import Icon from '@/components/ui/icon'
@@ -77,7 +78,8 @@ const Sidebar = () => {
   const [isMounted, setIsMounted] = useState(false)
   const [agentId] = useQueryState('agent')
 
-  const activeAgentName = agents.find((a) => a.id === agentId)?.name || 'Clyde'
+  const activeAgentName =
+    agents.find((a) => a.id === agentId)?.name || DEFAULT_AGENT_NAME
 
   useEffect(() => {
     setIsMounted(true)
