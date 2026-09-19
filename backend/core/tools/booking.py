@@ -55,8 +55,11 @@ async def get_booking_link() -> str:
         "Give the visitor this link so they can pick a time that suits them. "
         "Say it is for an AI and automation consultation. Do not state specific "
         "available times — the page shows real availability and they choose "
-        "their own timezone there. When speaking the link aloud, read it "
-        "naturally: cal dot com slash macharia. Afterwards you may offer to "
+        "their own timezone there. Out loud, say only \"cal dot com slash "
+        "macharia\" and STOP — never spell out or read the rest of the "
+        "address. Spelling a slug letter by letter is unusable to someone "
+        "listening, and in the written chat a card with the full link is "
+        "already on their screen. Afterwards you may offer to "
         "take their details as well, so he knows to expect them."
     )
 

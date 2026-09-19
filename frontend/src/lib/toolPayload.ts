@@ -142,6 +142,29 @@ export function toolResultText(toolCall: {
   return null
 }
 
+/**
+ * Validate an already-parsed payload object.
+ *
+ * The voice path receives the payload as JSON on its own field rather than as
+ * a marker inside a string, so it has nothing to extract -- but it must not
+ * skip the validation, or a bad `url` would reach an href on the voice card
+ * while the text card rejects it. Both channels end up here.
+ */
+export function validateToolPayload(data: unknown): ToolPayload | null {
+  if (!data || typeof data !== 'object') return null
+
+  const payload = data as { type?: unknown }
+  if (payload.type === 'booking') {
+    const url = (data as BookingPayload).url
+    if (typeof url !== 'string' || !isSafeHttpUrl(url)) return null
+    return data as BookingPayload
+  }
+  if (payload.type === 'lead_form' || payload.type === 'lead_saved') {
+    return data as LeadFormPayload | LeadSavedPayload
+  }
+  return null
+}
+
 /** Extract the payload from a tool result, or null when there isn't one. */
 export function parseToolPayload(text?: string | null): ToolPayload | null {
   if (!text || !text.includes(OPEN)) return null
@@ -154,19 +177,9 @@ export function parseToolPayload(text?: string | null): ToolPayload | null {
   } catch {
     return null
   }
-  if (!data || typeof data !== 'object') return null
-
-  const payload = data as { type?: unknown }
-  if (payload.type === 'booking') {
-    // A card without a usable link is worse than no card.
-    const url = (data as BookingPayload).url
-    if (typeof url !== 'string' || !isSafeHttpUrl(url)) return null
-    return data as BookingPayload
-  }
-  if (payload.type === 'lead_form' || payload.type === 'lead_saved') {
-    return data as LeadFormPayload | LeadSavedPayload
-  }
-  return null
+  // A card without a usable link is worse than no card; validateToolPayload
+  // owns that check for both channels.
+  return validateToolPayload(data)
 }
 
 /** Remove the marker, leaving only the human-readable sentence. */

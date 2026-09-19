@@ -22,6 +22,8 @@ import {
   DialogTitle
 } from '@/components/ui/dialog'
 import { useStore } from '@/store'
+import { CLOSE, OPEN, type ToolPayload } from '@/lib/toolPayload'
+import { BookingCard } from '../chat/ChatArea/Messages/tools/BookingCard'
 
 import { VoiceAgentControlBar } from './VoiceAgentControlBar'
 import { VoiceVisualizer, type VoiceState } from './VoiceVisualizer'
@@ -41,6 +43,14 @@ interface Turn {
   role: 'user' | 'agent'
   text: string
   final: boolean
+  /**
+   * A component this turn renders instead of text, such as the booking card.
+   *
+   * Spoken words and rendered components share one ordered transcript, so a
+   * card appears where it happened in the conversation rather than pinned
+   * somewhere separate.
+   */
+  card?: ToolPayload
 }
 
 export const AssemblyAIVoiceModal: React.FC<AssemblyAIVoiceModalProps> = ({
@@ -73,6 +83,43 @@ export const AssemblyAIVoiceModal: React.FC<AssemblyAIVoiceModalProps> = ({
       setMessages((prev) => [
         ...prev,
         { role, content: trimmed, created_at: Date.now() }
+      ])
+    },
+    [setMessages]
+  )
+
+  /**
+   * Mirror a rendered component into the main chat panel.
+   *
+   * The spoken turns are already mirrored, so leaving the card behind makes
+   * the written record disagree with what happened: the agent offers a booking
+   * and no booking is in sight. The chat draws its cards from
+   * `tool_calls[].result`, so the payload is written back in the same marker
+   * form a text-mode tool would have produced, and the existing ToolCards path
+   * renders it with no special case for voice.
+   */
+  const appendCardToChat = useCallback(
+    (toolName: string, payload: ToolPayload) => {
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: 'agent',
+          content: '',
+          created_at: Date.now(),
+          tool_calls: [
+            {
+              role: 'tool' as const,
+              content: null,
+              tool_call_id: `voice-${toolName}-${Date.now()}`,
+              tool_name: toolName,
+              tool_args: {},
+              tool_call_error: false,
+              metrics: { time: 0 },
+              created_at: Math.floor(Date.now() / 1000),
+              result: `${OPEN}${JSON.stringify(payload)}${CLOSE}`
+            }
+          ]
+        }
       ])
     },
     [setMessages]
@@ -127,6 +174,32 @@ export const AssemblyAIVoiceModal: React.FC<AssemblyAIVoiceModalProps> = ({
           { id: nextId(), role: 'agent', text, final: true }
         ])
         appendToChat('agent', text)
+      },
+      onToolPayload: (payload) => {
+        // Only the booking card renders in voice for now. A lead form here
+        // would need the microphone to yield while someone types, which is a
+        // separate interaction problem.
+        if (payload.type !== 'booking') return
+        let added = false
+        setTurns((prev) => {
+          // Asking to book twice in one session should not stack two
+          // calendars; the card is a standing offer, not a running log.
+          if (prev.some((t) => t.card?.type === 'booking')) return prev
+          added = true
+          return [
+            ...prev,
+            {
+              id: nextId(),
+              role: 'agent',
+              text: '',
+              final: true,
+              card: payload
+            }
+          ]
+        })
+        // Mirrored only when the modal actually showed one, so the written
+        // transcript matches the session rather than gaining a second card.
+        if (added) appendCardToChat('get_booking_link', payload)
       }
     })
 
@@ -138,7 +211,7 @@ export const AssemblyAIVoiceModal: React.FC<AssemblyAIVoiceModalProps> = ({
       sessionRef.current = null
       partialIdRef.current = null
     }
-  }, [isOpen, selectedEndpoint, appendToChat])
+  }, [isOpen, selectedEndpoint, appendToChat, appendCardToChat])
 
   // Reset between sessions so a new conversation starts clean.
   useEffect(() => {
@@ -250,25 +323,35 @@ export const AssemblyAIVoiceModal: React.FC<AssemblyAIVoiceModalProps> = ({
                   </div>
                 ) : (
                   <div className="flex flex-1 flex-col gap-2.5 overflow-y-auto px-2 py-1">
-                    {turns.map((turn) => (
-                      <div
-                        key={turn.id}
-                        className={`flex ${turn.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                      >
-                        <div
-                          className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm leading-relaxed shadow-lg backdrop-blur-xl ${
-                            turn.role === 'user'
-                              ? 'border border-sky-500/20 bg-sky-500/10 text-sky-50'
-                              : 'border border-white/10 bg-[#0f172a]/80 text-zinc-100'
-                          } ${turn.final ? '' : 'opacity-70'}`}
-                        >
-                          <span className="mb-0.5 block font-mono text-[10px] uppercase tracking-wide text-zinc-400">
-                            {turn.role === 'user' ? 'You' : agentName}
-                          </span>
-                          {turn.text}
+                    {turns.map((turn) =>
+                      turn.card?.type === 'booking' ? (
+                        // Wider than a speech bubble and without its chrome:
+                        // the card carries its own panel, and the calendar
+                        // needs the room. Cal falls back to its mobile layout
+                        // at this width, which is the right call in a modal.
+                        <div key={turn.id} className="w-full">
+                          <BookingCard payload={turn.card} />
                         </div>
-                      </div>
-                    ))}
+                      ) : (
+                        <div
+                          key={turn.id}
+                          className={`flex ${turn.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                        >
+                          <div
+                            className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm leading-relaxed shadow-lg backdrop-blur-xl ${
+                              turn.role === 'user'
+                                ? 'border border-sky-500/20 bg-sky-500/10 text-sky-50'
+                                : 'border border-white/10 bg-[#0f172a]/80 text-zinc-100'
+                            } ${turn.final ? '' : 'opacity-70'}`}
+                          >
+                            <span className="mb-0.5 block font-mono text-[10px] uppercase tracking-wide text-zinc-400">
+                              {turn.role === 'user' ? 'You' : agentName}
+                            </span>
+                            {turn.text}
+                          </div>
+                        </div>
+                      )
+                    )}
                     <div ref={transcriptEndRef} />
                   </div>
                 )}

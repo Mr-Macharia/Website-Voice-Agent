@@ -441,8 +441,11 @@ async def voice_tool(req: VoiceToolRequest, request: Request):
             "to try again in a moment and carry on."
         }
 
-    result = await voice_tools.dispatch(req.name, req.arguments)
-    return {"result": result}
+    # `ui` carries a structured payload when the tool has one to draw (the
+    # booking card). `result` is unchanged: it is what the agent speaks, and
+    # the marker is always stripped from it.
+    result, ui = await voice_tools.dispatch(req.name, req.arguments)
+    return {"result": result, "ui": ui}
 
 
 @base_app.post("/api/llm/chat/completions")

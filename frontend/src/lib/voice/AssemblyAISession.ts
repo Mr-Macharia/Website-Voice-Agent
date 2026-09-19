@@ -15,6 +15,8 @@
  * from what was actually said.
  */
 
+import { validateToolPayload, type ToolPayload } from '@/lib/toolPayload'
+
 export type VoiceSessionState =
   | 'idle'
   | 'connecting'
@@ -35,6 +37,15 @@ export interface VoiceSessionCallbacks {
   onUserPartial: (text: string) => void
   onUserFinal: (text: string) => void
   onAgentFinal: (text: string) => void
+  /**
+   * A tool returned something the UI should draw, such as the booking card.
+   *
+   * Voice tool calls run here in the browser, so React sees every one of them.
+   * The agent still speaks its own sentence; the component renders alongside
+   * that rather than replacing it. Optional, so a caller that renders no
+   * components needs no change.
+   */
+  onToolPayload?: (payload: ToolPayload) => void
 }
 
 const WS_URL = 'wss://agents.assemblyai.com/v1/ws'
@@ -375,6 +386,13 @@ export class AssemblyAISession {
       result = String(data.result ?? '')
       if (!res.ok || !result) {
         result = `Could not run '${name}'. Tell the visitor it didn't work and carry on.`
+      } else if (data.ui) {
+        // Parsed with the same function the text chat uses, so the validation
+        // (including the http/https check before a URL reaches an href) cannot
+        // drift between the two channels. A malformed payload yields null and
+        // simply renders nothing -- the agent's spoken answer still stands.
+        const payload = validateToolPayload(data.ui)
+        if (payload) this.callbacks.onToolPayload?.(payload)
       }
     } catch {
       result = `Could not reach '${name}'. Tell the visitor it didn't work and carry on.`

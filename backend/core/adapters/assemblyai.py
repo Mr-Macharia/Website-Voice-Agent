@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import inspect
 import logging
-from typing import Any, Awaitable, Callable
+from typing import Any, Awaitable, Callable, Optional
 
 from core import config
 from core import ui_payload
@@ -252,40 +252,52 @@ def get_tool_schemas() -> list[dict]:
     return schemas
 
 
-async def dispatch(name: str, arguments: dict[str, Any]) -> str:
-    """Run a tool call and return its result as a string.
+async def dispatch(
+    name: str, arguments: dict[str, Any]
+) -> tuple[str, Optional[dict[str, Any]]]:
+    """Run a tool call and return (spoken text, UI payload).
 
     Errors come back as text the agent can read out and recover from, never as
     exceptions: a raised error mid-conversation leaves the visitor listening to
     silence. The message names what failed and what to do next, because that is
     what the model will act on.
+
+    The first element is what the agent speaks, always with the UI marker
+    stripped. The second is the parsed payload when the tool appended one, for
+    the browser to render a component from -- voice tool calls run client-side,
+    so React sees this. It is `None` for tools that append nothing, and for
+    every error path: a failure has nothing to draw.
     """
     handler = _HANDLERS.get(name)
     if handler is None:
         logger.warning("Unknown tool call: %s", name)
         return (
             f"The tool '{name}' isn't available. Tell the visitor you can't do "
-            "that right now and carry on with the conversation."
+            "that right now and carry on with the conversation.",
+            None,
         )
 
     try:
         result = handler(**(arguments or {}))
         if inspect.isawaitable(result):
             result = await result
-        # Tools may append a UI payload for the text chat to render a card or
-        # form from. Voice has no components and reads this string aloud, so
-        # the marker is stripped here rather than spoken.
-        return ui_payload.strip_payload(str(result))
+        # Tools may append a UI payload. The marker is always stripped from the
+        # spoken string -- it must never be read aloud -- but the parsed payload
+        # is handed back so the browser can render a card alongside the speech.
+        text = str(result)
+        return ui_payload.strip_payload(text), ui_payload.extract(text)
     except TypeError as e:
         # Wrong or missing arguments — recoverable by asking again.
         logger.warning("Bad arguments for %s: %s", name, e)
         return (
             f"Could not run '{name}' with those details. Ask the visitor to "
-            "repeat what you need, then try again."
+            "repeat what you need, then try again.",
+            None,
         )
     except Exception as e:
         logger.exception("Tool %s failed", name)
         return (
             f"Could not complete '{name}': {e}. Tell the visitor it didn't work "
-            "and offer to pass the message on another way."
+            "and offer to pass the message on another way.",
+            None,
         )

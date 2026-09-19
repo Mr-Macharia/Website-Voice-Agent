@@ -39,6 +39,12 @@
        features (persistence, knowledge, booking, leads, gmail) are actually
        configured and live
 
-- [ ] 14. **Interactive tool rendering** - booking card and lead-capture form
+- [x] 14. **Interactive tool rendering** - booking card and lead-capture form
        rendered from tool results in text chat, replacing prose-only tool output
        (`frontend/src/components/chat/ChatArea/Messages/`, `core/tools/`)
+       — shipped 2026-09-19; archived as a fix at
+       `blueprint/history/fixes/tool-card-result-field.md`
+
+- [x] 15. **Booking card in voice mode** - render the booking card in the voice
+       transcript so a visitor picks a slot instead of transcribing a spoken URL
+       (`frontend/src/components/voice/`, `core/adapters/assemblyai.py`)
