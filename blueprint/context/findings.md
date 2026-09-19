@@ -57,3 +57,31 @@ forwarded hop (the one the platform router appends) rather than the first, would
 both remove the cheap reset. Worth doing before this endpoint sees real traffic,
 but it does not reinstate the unthrottled path F-05 described.
 **Resolution:**
+
+### F-08 [P2] open - Two BookingCards racing one Cal embed leaves the chat copy showing a failure
+
+**File:** frontend/src/components/chat/ChatArea/Messages/tools/BookingCard.tsx:66
+**Found:** 2026-09-20 by user browser testing during feature 16 Step 3
+**Why it matters:** A voice booking mounts two `BookingCard`s from one payload:
+`onToolPayload` (`AssemblyAIVoiceModal.tsx:178-203`) pushes a card turn into the
+modal transcript AND calls `appendCardToChat`, which mirrors the same payload
+into the main chat panel. Both mount and both call `cal('inline', ...)`.
+That call is a global singleton keyed on Cal's own state, not per-element, so
+Cal binds its iframe to whichever container it last received. The losing card
+never receives an iframe, so its `MutationObserver` never fires, the
+`EMBED_TIMEOUT_MS` (10s) timer expires, and it falls back to
+"The calendar could not load here — this link still works."
+
+Observed live: during a voice session the modal card rendered the calendar
+correctly while the mirrored chat card showed the failure text. Asking again
+from text mode after the modal closed rendered correctly, because only one card
+was competing by then. The fallback link is always correct, so a visitor can
+still book — this degrades the written record, it does not block booking.
+
+**Suggested fix:** Give each embed its own Cal namespace
+(`cal('init', <unique-namespace>)` then mount through `Cal.ns[namespace]`),
+which `lib/calEmbed.ts:54-67` already builds the queue machinery for. Cheaper
+alternative: render the inline calendar only in the card that is actually
+visible and let the mirrored chat copy be link-only, since its job is to leave a
+written record rather than to be booked from twice.
+**Resolution:**

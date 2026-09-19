@@ -8,6 +8,12 @@ import {
   type ChatMessage
 } from '@/types/os'
 
+// The backend origin is inlined at build time by Next.js, so it must be set in
+// the hosting project before the build runs; changing it later needs a rebuild,
+// not a restart. Falls back to the local dev backend when unset.
+const DEFAULT_ENDPOINT =
+  process.env.NEXT_PUBLIC_AGENT_OS_URL || 'http://localhost:7777'
+
 interface Store {
   hydrated: boolean
   setHydrated: () => void
@@ -81,7 +87,7 @@ export const useStore = create<Store>()(
             typeof messages === 'function' ? messages(state.messages) : messages
         })),
       chatInputRef: { current: null },
-      selectedEndpoint: 'http://localhost:7777',
+      selectedEndpoint: DEFAULT_ENDPOINT,
       setSelectedEndpoint: (selectedEndpoint) =>
         set(() => ({ selectedEndpoint })),
       authToken: '',
@@ -107,11 +113,17 @@ export const useStore = create<Store>()(
         set(() => ({ isSessionsLoading }))
     }),
     {
-      name: 'endpoint-storage',
+      // Renamed from 'endpoint-storage' deliberately. That key persisted
+      // selectedEndpoint, so any browser that ever loaded this app locally
+      // holds a stale 'http://localhost:7777'. Starting from a new key lets
+      // those browsers fall back to DEFAULT_ENDPOINT instead of a dead
+      // address. Never read the old key back: that would reintroduce exactly
+      // the value this rename discards.
+      name: 'voice-agent-storage',
       storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({
-        selectedEndpoint: state.selectedEndpoint
-      }),
+      // selectedEndpoint is intentionally absent: the backend URL comes from
+      // build-time config, not from whatever a browser cached earlier.
+      partialize: () => ({}),
       onRehydrateStorage: () => (state) => {
         state?.setHydrated?.()
       }
