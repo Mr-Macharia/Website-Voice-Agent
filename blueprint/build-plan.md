@@ -48,3 +48,18 @@
 - [x] 15. **Booking card in voice mode** - render the booking card in the voice
        transcript so a visitor picks a slot instead of transcribing a spoken URL
        (`frontend/src/components/voice/`, `core/adapters/assemblyai.py`)
+
+- [x] 16. **Sidebar cleanup for public deployment** - remove the Backend endpoint,
+       Mode, AUTH TOKEN and model-name controls from the sidebar; the backend URL
+       comes from build-time config and the stale persisted endpoint is purged
+       (`frontend/src/components/chat/Sidebar/`, `frontend/src/store.ts`)
+
+- [ ] 17. **Cookie-based visitor sessions** - an opaque HttpOnly visitor cookie
+       (5-day expiry) groups a visitor's chat sessions across reloads and tabs,
+       with CORS narrowed from a wildcard to an exact origin allowlist so
+       credentialed cross-site requests work (`backend/server.py`)
+
+- [ ] 18. **Production deployment prep** - Vercel frontend and Heroku backend
+       config, env review, and the F-07 rate-limit hardening that must land
+       before `/api/leads` is publicly reachable (`app.json`, `vercel.json`,
+       `backend/core/rate_limit.py`)

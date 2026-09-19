@@ -5,9 +5,6 @@ import { ChatArea } from '@/components/chat/ChatArea'
 import { Suspense } from 'react'
 
 export default function Home() {
-  const hasEnvToken = !!process.env.NEXT_PUBLIC_OS_SECURITY_KEY
-  const envToken = process.env.NEXT_PUBLIC_OS_SECURITY_KEY || ''
-
   return (
     <Suspense
       fallback={
@@ -24,7 +21,7 @@ export default function Home() {
 
         {/* Application Layout */}
         <div className="relative z-10 flex size-full">
-          <Sidebar hasEnvToken={hasEnvToken} envToken={envToken} />
+          <Sidebar />
           <ChatArea />
         </div>
       </div>
