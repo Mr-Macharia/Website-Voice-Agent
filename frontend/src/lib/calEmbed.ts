@@ -80,3 +80,51 @@ export function getCal(): CalApi | null {
   if (typeof window === 'undefined') return null
   return (window as CalWindow).Cal ?? null
 }
+
+/**
+ * Install the loader and return a callable scoped to its own Cal namespace.
+ *
+ * `Cal("inline", ...)` addresses one global embed instance. Its
+ * `elementOrSelector` argument names a target, but the state behind it is
+ * shared, so a second `inline` call re-points that single instance at the
+ * newer element and the first container never receives an iframe. Two booking
+ * cards on screen at once -- a voice booking mirrors its card into the chat
+ * panel, and two bookings in one chat both stay mounted -- therefore raced,
+ * and the loser sat empty until its timeout.
+ *
+ * A namespace gives each card its own instance. `Cal("init", "<name>", ...)`
+ * creates `Cal.ns["<name>"]` with its own queue, which embed.js replays
+ * separately once it loads, exactly as the default queue is replayed.
+ *
+ * DOES NOT WORK for embeds created after the script loads, which is why
+ * BookingCard does not use it. embed.js upgrades namespaces into real embed
+ * instances in one loop that runs once, at the end of the script:
+ *
+ *     h.instance = new v(xe, h.q)
+ *     for (const [a, e] of Object.entries(h.ns))
+ *       e.instance = e.instance ?? new v(a, e.q)
+ *
+ * A namespace registered after that moment gets a queue from the stub above
+ * and never an instance, so its `inline` call is never processed and no
+ * iframe appears. The constructor is module-private, so there is no way to
+ * instantiate a late namespace. Verified against embed.js v1.6.0
+ * (fingerprint e8a6bde7) and reproduced live: with one namespace per card,
+ * the first booking card rendered and every later one showed the fallback.
+ *
+ * Kept because it is correct for embeds known before the script loads.
+ *
+ * Returns the namespaced callable, or null outside the browser.
+ */
+export function loadCalNamespace(
+  namespace: string,
+  config: Record<string, unknown> = {},
+  embedJsUrl: string = EMBED_JS_URL
+): CalApi | null {
+  const cal = loadCalApi(embedJsUrl)
+  if (typeof cal !== 'function') return null
+
+  // Creates the namespaced queue and enqueues the init call on it.
+  cal('init', namespace, config)
+
+  return cal.ns?.[namespace] ?? null
+}

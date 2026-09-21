@@ -331,7 +331,7 @@ export const AssemblyAIVoiceModal: React.FC<AssemblyAIVoiceModalProps> = ({
                         // needs the room. Cal falls back to its mobile layout
                         // at this width, which is the right call in a modal.
                         <div key={turn.id} className="w-full">
-                          <BookingCard payload={turn.card} />
+                          <BookingCard payload={turn.card} priority />
                         </div>
                       ) : (
                         <div
