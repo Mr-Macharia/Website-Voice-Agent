@@ -54,7 +54,7 @@
        comes from build-time config and the stale persisted endpoint is purged
        (`frontend/src/components/chat/Sidebar/`, `frontend/src/store.ts`)
 
-- [ ] 17. **Cookie-based visitor sessions** - an opaque HttpOnly visitor cookie
+- [x] 17. **Cookie-based visitor sessions** - an opaque HttpOnly visitor cookie
        (5-day expiry) groups a visitor's chat sessions across reloads and tabs,
        with CORS narrowed from a wildcard to an exact origin allowlist so
        credentialed cross-site requests work (`backend/server.py`)
