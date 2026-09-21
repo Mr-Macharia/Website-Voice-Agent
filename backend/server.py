@@ -39,6 +39,7 @@ from core import guardrails
 from core import knowledge as core_knowledge
 from core import persona
 from core import rate_limit
+from core import visitor as core_visitor
 from core import ui_payload
 from core.tools import leads as core_leads
 from core.adapters.agno import SiteTools
@@ -223,13 +224,76 @@ base_app = FastAPI(
     version="1.0.0"
 )
 
+# Exact origins, never "*": a browser refuses to send credentials to a
+# wildcard origin, so the visitor cookie would never arrive. Configured in
+# CORS_ALLOWED_ORIGINS; the Vercel URL must be added there before the frontend
+# goes live.
 base_app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=core_config.CORS_ALLOWED_ORIGINS,
     allow_credentials=True,
+    # Left broad deliberately. The AgentOS routes this app wraps are not
+    # enumerated here, so narrowing methods or headers risks breaking a route
+    # that is not obvious from this file. The origin allowlist is the control
+    # that matters for credentialed requests.
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ---------------------------------------------------------------------------
+# Visitor identity
+# ---------------------------------------------------------------------------
+# One opaque HttpOnly cookie per browser, so a visitor's chat history survives
+# a reload and follows them across tabs. Not a login: see core/visitor.py.
+#
+# The cookie value is put on request.state, which is where Agno's user-scope
+# layer reads it (agno/os/middleware/user_scope.py: get_scoped_user_id reads
+# request.state.user_id and request.state.user_isolation_enabled, and
+# resolve_db_and_scope prefers that over the caller's ?user_id= query param).
+# Setting these two fields is therefore real server-side enforcement, not a
+# filter we apply afterwards: a client cannot widen its own scope by passing a
+# different user_id.
+#
+# Server-to-server callers are skipped. AssemblyAI calls the LLM proxy with no
+# browser and no cookie, so stamping it with a visitor identity would be
+# meaningless and would mint a cookie nobody receives.
+_NO_COOKIE_PATHS = ("/api/llm/", "/api/voice/token", "/api/voice/tool")
+
+
+@base_app.middleware("http")
+async def visitor_cookie_middleware(request: Request, call_next):
+    if request.url.path.startswith(_NO_COOKIE_PATHS):
+        return await call_next(request)
+
+    raw = request.cookies.get(core_config.VISITOR_COOKIE_NAME)
+    # An invalid cookie is treated as no cookie: it is client-supplied input,
+    # so it is replaced rather than repaired or trusted.
+    if core_visitor.is_valid_visitor_id(raw):
+        visitor_id = raw
+        issue = False
+    else:
+        visitor_id = core_visitor.new_visitor_id()
+        issue = True
+
+    request.state.user_id = visitor_id
+    request.state.user_isolation_enabled = True
+
+    response = await call_next(request)
+
+    if issue:
+        response.set_cookie(
+            key=core_config.VISITOR_COOKIE_NAME,
+            value=visitor_id,
+            max_age=core_config.VISITOR_COOKIE_DAYS * 24 * 60 * 60,
+            path="/",
+            httponly=True,
+            secure=core_config.VISITOR_COOKIE_SECURE,
+            # None so the cookie survives the cross-site hop from the frontend
+            # origin to this backend. Requires Secure, hence the setting above.
+            samesite="none" if core_config.VISITOR_COOKIE_SECURE else "lax",
+        )
+    return response
+
 
 DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
 LIVEKIT_URL = os.getenv("LIVEKIT_URL", "wss://voice-agent.livekit.cloud")

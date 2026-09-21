@@ -25,6 +25,9 @@ export const getAgentsAPI = async (
   try {
     const response = await fetch(url, {
       method: 'GET',
+      // Sends the visitor cookie so the backend scopes this
+      // request to the right browser; the cookie is HttpOnly.
+      credentials: 'include',
       headers: createHeaders(authToken)
     })
     if (!response.ok) {
@@ -45,6 +48,9 @@ export const getStatusAPI = async (
 ): Promise<number> => {
   const response = await fetch(APIRoutes.Status(base), {
     method: 'GET',
+    // Sends the visitor cookie so the backend scopes this
+    // request to the right browser; the cookie is HttpOnly.
+    credentials: 'include',
     headers: createHeaders(authToken)
   })
   return response.status
@@ -65,6 +71,9 @@ export const getAllSessionsAPI = async (
 
     const response = await fetch(url.toString(), {
       method: 'GET',
+      // Sends the visitor cookie so the backend scopes this
+      // request to the right browser; the cookie is HttpOnly.
+      credentials: 'include',
       headers: createHeaders(authToken)
     })
 
@@ -95,6 +104,9 @@ export const getSessionAPI = async (
     `${APIRoutes.GetSession(base, sessionId)}?${queryParams.toString()}`,
     {
       method: 'GET',
+      // Sends the visitor cookie so the backend scopes this
+      // request to the right browser; the cookie is HttpOnly.
+      credentials: 'include',
       headers: createHeaders(authToken)
     }
   )
@@ -118,6 +130,9 @@ export const deleteSessionAPI = async (
     `${APIRoutes.DeleteSession(base, sessionId)}?${queryParams.toString()}`,
     {
       method: 'DELETE',
+      // Sends the visitor cookie so the backend scopes this
+      // request to the right browser; the cookie is HttpOnly.
+      credentials: 'include',
       headers: createHeaders(authToken)
     }
   )
@@ -132,6 +147,9 @@ export const getTeamsAPI = async (
   try {
     const response = await fetch(url, {
       method: 'GET',
+      // Sends the visitor cookie so the backend scopes this
+      // request to the right browser; the cookie is HttpOnly.
+      credentials: 'include',
       headers: createHeaders(authToken)
     })
     if (!response.ok) {
@@ -157,6 +175,9 @@ export const deleteTeamSessionAPI = async (
     APIRoutes.DeleteTeamSession(base, teamId, sessionId),
     {
       method: 'DELETE',
+      // Sends the visitor cookie so the backend scopes this
+      // request to the right browser; the cookie is HttpOnly.
+      credentials: 'include',
       headers: createHeaders(authToken)
     }
   )
