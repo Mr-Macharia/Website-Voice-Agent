@@ -43,25 +43,3 @@ forwarded hop (the one the platform router appends) rather than the first, would
 both remove the cheap reset. Worth doing before this endpoint sees real traffic,
 but it does not reinstate the unthrottled path F-05 described.
 **Resolution:**
-
-### F-10 [P3] open - loadCalNamespace is exported but has no callers
-
-**File:** frontend/src/lib/calEmbed.ts:118
-**Found:** 2026-09-21 by /audit (scope: current; lens: quality)
-**Why it matters:** The F-08 fix added `loadCalNamespace` while attempting the
-namespace approach, then abandoned that approach when embed.js turned out to
-instantiate namespaces only once at script load. The function survived the
-change and now has zero callers anywhere in `frontend/src`. Its docblock is
-genuinely valuable -- it records, with the exact source excerpt, why namespaces
-cannot solve this problem, which is the single most expensive thing learned
-during four failed attempts. But an exported function with no callers reads as
-available API, and the next person may reach for it precisely because it is
-named for the problem it cannot solve.
-**Suggested fix:** Keep the explanation, drop the code: move the docblock's
-content into a comment near `loadCalApi` (or into the `BookingCard` header
-where the ownership protocol is described) and delete the function. Alternative:
-keep it and mark it `@internal`/unused-by-design with an explicit pointer to
-`BookingCard`'s ownership comment. Either is fine; leaving a silently unused
-export is the option to avoid. Note `getCal` at line 79 is also unused, but it
-predates this fix and is out of scope for this entry.
-**Resolution:**
