@@ -44,26 +44,6 @@ both remove the cheap reset. Worth doing before this endpoint sees real traffic,
 but it does not reinstate the unthrottled path F-05 described.
 **Resolution:**
 
-### F-09 [P3] open - The voice control bar derives behavior from a display string
-
-**File:** frontend/src/components/voice/VoiceAgentControlBar.tsx:26
-**Found:** 2026-09-20 by /audit (scope: current; lens: quality)
-**Why it matters:** `const isLiveKit = mode.toLowerCase().includes('livekit')`
-makes one prop do two jobs: `mode` is rendered verbatim to the visitor at line
-60, and it is simultaneously parsed to choose which icon to show. The three
-values passed today (`VOICE_MODE_LABEL`, `"LiveKit WebRTC"`, `"LiveKit voice"`)
-all resolve correctly, so this is not a live bug. But the coupling is invisible
-from the call sites: centralizing the label in `VOICE_MODE_LABEL` (this fix)
-means a future copy edit happens in `lib/agentIdentity.ts`, one file removed
-from the substring test that depends on it. Renaming the label to something
-containing "livekit", or renaming the LiveKit modes to drop it, silently
-switches the icon with no type error and nothing failing.
-**Suggested fix:** Pass the transport as its own prop — for example
-`transport?: 'livekit' | 'assemblyai'` — and keep `mode` purely for display.
-Small and local: three call sites and one component. Not urgent, and out of
-scope for the F-04 fix, which only moved literals.
-**Resolution:**
-
 ### F-10 [P3] open - loadCalNamespace is exported but has no callers
 
 **File:** frontend/src/lib/calEmbed.ts:118

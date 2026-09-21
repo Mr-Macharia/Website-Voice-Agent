@@ -11,7 +11,16 @@ interface VoiceAgentControlBarProps {
   onDisconnect: () => void
   isConnected: boolean
   agentName?: string
+  /**
+   * Display text for the session, shown verbatim beside the agent name.
+   *
+   * Display only. The icon is chosen by `transport`, never by inspecting this
+   * string: it used to be, and that made renaming the label silently change
+   * the icon with nothing failing.
+   */
   mode?: string
+  /** Which voice backend is running. Selects the icon. */
+  transport?: 'livekit' | 'assemblyai'
 }
 
 export const VoiceAgentControlBar: React.FC<VoiceAgentControlBarProps> = ({
@@ -20,9 +29,12 @@ export const VoiceAgentControlBar: React.FC<VoiceAgentControlBarProps> = ({
   onDisconnect,
   isConnected,
   agentName = DEFAULT_AGENT_NAME,
-  mode = VOICE_MODE_LABEL
+  mode = VOICE_MODE_LABEL,
+  // Matches the default `mode`, so a caller passing neither keeps the
+  // AssemblyAI icon it shows today.
+  transport = 'assemblyai'
 }) => {
-  const isLiveKit = mode.toLowerCase().includes('livekit')
+  const isLiveKit = transport === 'livekit'
 
   return (
     <div className="flex w-full items-center justify-between border-t border-white/10 bg-[#0a0f1e]/95 px-6 py-3.5 backdrop-blur-2xl">
