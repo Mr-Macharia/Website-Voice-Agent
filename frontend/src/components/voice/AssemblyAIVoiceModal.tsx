@@ -369,6 +369,7 @@ export const AssemblyAIVoiceModal: React.FC<AssemblyAIVoiceModalProps> = ({
               onDisconnect={handleClose}
               agentName={agentName}
               mode={VOICE_MODE_LABEL}
+              transport="assemblyai"
             />
           </div>
         )}

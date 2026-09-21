@@ -294,6 +294,7 @@ const LiveKitVoiceSession: React.FC<{
         onDisconnect={onDisconnect}
         agentName={agentName}
         mode="LiveKit WebRTC"
+        transport="livekit"
       />
     </div>
   )
@@ -1592,6 +1593,7 @@ const DirectVoiceSession: React.FC<{
         onDisconnect={onDisconnect}
         agentName={agentName}
         mode="LiveKit voice"
+        transport="livekit"
       />
     </div>
   )
