@@ -31,20 +31,130 @@ import { loadCalApi } from '@/lib/calEmbed'
 
 const CAL_ORIGIN = 'https://app.cal.com'
 
+/**
+ * Which card currently owns the inline calendar, and the next id to hand out.
+ *
+ * Cal's `inline` embed is effectively one instance per page for our purposes.
+ * Namespaces look like the answer and are not: embed.js upgrades namespaces
+ * into real instances in a single loop that runs once, when the script
+ * finishes loading, and its constructor is module-private. A namespace created
+ * after that point gets a queue and never an instance, so its calendar never
+ * appears. A chat that renders cards as the conversation happens cannot
+ * register every namespace up front, so that door is closed.
+ *
+ * So exactly one card shows a calendar: the newest, which is the one the
+ * visitor just asked for. Every other card renders link-only -- not as a
+ * failure, because nothing failed, but as the deliberate presentation for a
+ * card that is no longer the live one.
+ */
+let calOwnerSeq = 0
+
+/**
+ * Cards waiting to be told they have been superseded.
+ *
+ * An explicit notification rather than relying on React to re-render the older
+ * card: nothing guarantees a mounted card re-renders just because a new one
+ * appeared elsewhere in the tree, and a card that never re-renders would keep
+ * a calendar it no longer owns.
+ */
+const calOwnerListeners = new Set<(ownerId: number) => void>()
+
+/**
+ * Rank of the card that currently holds the calendar, and its id.
+ *
+ * Rank beats recency: a priority card (one in the voice modal, on top of
+ * everything) keeps the calendar even when a lower-ranked card mounts later.
+ * Among cards of equal rank the newest wins, which is right for two bookings
+ * in one chat.
+ */
+let calOwnerRank = -1
+let calOwnerId = -1
+
+function claimCalOwnership(id: number, rank: number) {
+  // A rejected claim still has to notify: the claiming card starts
+  // optimistically as owner, so without this it would keep a calendar the
+  // higher-ranked card already holds.
+  if (rank < calOwnerRank) {
+    for (const notify of calOwnerListeners) notify(calOwnerId)
+    return
+  }
+  calOwnerRank = rank
+  calOwnerId = id
+  for (const notify of calOwnerListeners) notify(id)
+}
+
+/** A card unmounting releases the calendar so a remaining card can take it. */
+function releaseCalOwnership(id: number) {
+  if (calOwnerId !== id) return
+  calOwnerRank = -1
+  calOwnerId = -1
+  for (const notify of calOwnerListeners) notify(-1)
+}
+
 // How long to wait for the iframe before showing the link-only fallback.
 const EMBED_TIMEOUT_MS = 10000
 
 interface BookingCardProps {
   payload: BookingPayload
+  /**
+   * Set on a card rendered inside the voice modal.
+   *
+   * A voice booking mounts two cards from one payload: one in the modal and a
+   * mirrored one in the chat behind it. Only one can hold the calendar, and
+   * "newest wins" picks the wrong one -- the chat mirror is appended second,
+   * so it would claim the calendar while the visitor is looking at the modal
+   * on top of it. A card on top outranks one behind it, whenever it mounted.
+   */
+  priority?: boolean
 }
 
-export const BookingCard: React.FC<BookingCardProps> = ({ payload }) => {
+export const BookingCard: React.FC<BookingCardProps> = ({
+  payload,
+  priority = false
+}) => {
   const calLink = calLinkFromUrl(payload.url)
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mountedRef = useRef(false)
+  // Allocated once per component instance, not per render. Allocation only --
+  // claiming ownership notifies other cards, and notifying during render means
+  // calling setState on a component React is not currently rendering, which it
+  // rejects ("Cannot update a component while rendering a different
+  // component"). The claim happens in the effect below instead.
+  const idRef = useRef<number | null>(null)
+  if (idRef.current === null) {
+    idRef.current = calOwnerSeq += 1
+  }
+  // Optimistic: a card starts as owner and yields if an newer one claims.
+  // Corrected on mount, so a card rendered after a newer sibling settles fast.
+  const [isOwner, setIsOwner] = useState(true)
   const [status, setStatus] = useState<'loading' | 'ready' | 'failed'>(
     calLink ? 'loading' : 'failed'
   )
+
+  // A card that has been superseded gives up its calendar and becomes
+  // link-only. Subscribing means this does not depend on the older card
+  // happening to re-render for another reason.
+  useEffect(() => {
+    const onOwnerChanged = (ownerId: number) => {
+      if (ownerId === -1) {
+        // The owner unmounted. Re-claim; the ranking decides who actually
+        // takes it when several cards are still on screen.
+        claimCalOwnership(idRef.current as number, priority ? 1 : 0)
+        return
+      }
+      setIsOwner(idRef.current === ownerId)
+    }
+    calOwnerListeners.add(onOwnerChanged)
+    // Claim on mount, in commit phase where notifying siblings is safe.
+    const id = idRef.current as number
+    claimCalOwnership(id, priority ? 1 : 0)
+    return () => {
+      calOwnerListeners.delete(onOwnerChanged)
+      // Closing the voice modal unmounts its card; the mirrored chat card
+      // behind it should get the calendar rather than leaving none on screen.
+      releaseCalOwnership(id)
+    }
+  }, [priority])
 
   /**
    * Mount the calendar into our own div.
@@ -55,6 +165,7 @@ export const BookingCard: React.FC<BookingCardProps> = ({ payload }) => {
    * and mounting twice stacks two iframes in one card.
    */
   const mountCalendar = useCallback(() => {
+    if (!isOwner) return
     if (!calLink || mountedRef.current || !containerRef.current) return
     try {
       // Installs the queueing stub and injects embed.js on first call. Calls
@@ -82,13 +193,30 @@ export const BookingCard: React.FC<BookingCardProps> = ({ payload }) => {
     } catch {
       setStatus('failed')
     }
-  }, [calLink])
+  }, [calLink, isOwner])
 
   // Mount on render. The queue makes this safe whether or not embed.js has
   // finished loading, and whether this is the first booking card or the fifth.
   useEffect(() => {
-    mountCalendar()
-  }, [mountCalendar])
+    if (!isOwner) {
+      // The container just unmounted. Cal refuses a second `inline()` while
+      // its previous element is still in the DOM ("Inline embed already
+      // exists. Ignoring this call") and offers no teardown API, so removing
+      // the element is what frees the embed. Clearing the guard lets this
+      // card mount afresh if it becomes the owner again -- without this it
+      // would render an empty container forever.
+      mountedRef.current = false
+      setStatus(calLink ? 'loading' : 'failed')
+      return
+    }
+    // Deferred one frame. When the modal closes, React can remove its
+    // container and mount this one in the same commit; Cal checks
+    // `document.body.contains(inlineEl)` synchronously, so calling
+    // immediately can still see the old element and refuse. A frame later the
+    // removal has landed.
+    const raf = requestAnimationFrame(() => mountCalendar())
+    return () => cancelAnimationFrame(raf)
+  }, [mountCalendar, isOwner, calLink])
 
   // Watch for the iframe Cal injects. Its arrival is what "ready" means; its
   // absence after the timeout means the script was blocked or failed, and the
@@ -97,7 +225,7 @@ export const BookingCard: React.FC<BookingCardProps> = ({ payload }) => {
     // Keeps watching after a timeout, not only while loading: a slow script
     // that lands at 12s should still produce a calendar rather than leaving
     // the visitor with a failure message beside a working embed.
-    if (!calLink || status === 'ready') return
+    if (!isOwner || !calLink || status === 'ready') return
     const el = containerRef.current
     if (!el) return
 
@@ -124,7 +252,7 @@ export const BookingCard: React.FC<BookingCardProps> = ({ payload }) => {
       observer.disconnect()
       if (timer) clearTimeout(timer)
     }
-  }, [calLink, status])
+  }, [calLink, status, isOwner])
 
   return (
     <div className="rounded-2xl border border-[#e85d04]/25 bg-[#e85d04]/[0.07] p-3.5 backdrop-blur-md">
@@ -155,7 +283,7 @@ export const BookingCard: React.FC<BookingCardProps> = ({ payload }) => {
         stop Cal ever rendering into this node, turning a slow load into a
         permanent failure.
       */}
-      {calLink ? (
+      {calLink && isOwner ? (
         <div
           className={
             status === 'failed'
@@ -184,7 +312,11 @@ export const BookingCard: React.FC<BookingCardProps> = ({ payload }) => {
       ) : null}
 
       <div className="mt-2.5 flex items-center justify-between gap-2">
-        {status === 'failed' ? (
+        {!isOwner ? (
+          // Not a failure: a superseded card is deliberately link-only, so it
+          // must not claim the calendar broke.
+          <span className="text-xs text-zinc-600">Pick a time on cal.com</span>
+        ) : status === 'failed' ? (
           <p className="text-xs text-zinc-500">
             The calendar could not load here — this link still works.
           </p>

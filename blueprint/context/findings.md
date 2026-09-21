@@ -44,34 +44,6 @@ both remove the cheap reset. Worth doing before this endpoint sees real traffic,
 but it does not reinstate the unthrottled path F-05 described.
 **Resolution:**
 
-### F-08 [P2] open - Two BookingCards racing one Cal embed leaves the chat copy showing a failure
-
-**File:** frontend/src/components/chat/ChatArea/Messages/tools/BookingCard.tsx:66
-**Found:** 2026-09-20 by user browser testing during feature 16 Step 3
-**Why it matters:** A voice booking mounts two `BookingCard`s from one payload:
-`onToolPayload` (`AssemblyAIVoiceModal.tsx:178-203`) pushes a card turn into the
-modal transcript AND calls `appendCardToChat`, which mirrors the same payload
-into the main chat panel. Both mount and both call `cal('inline', ...)`.
-That call is a global singleton keyed on Cal's own state, not per-element, so
-Cal binds its iframe to whichever container it last received. The losing card
-never receives an iframe, so its `MutationObserver` never fires, the
-`EMBED_TIMEOUT_MS` (10s) timer expires, and it falls back to
-"The calendar could not load here — this link still works."
-
-Observed live: during a voice session the modal card rendered the calendar
-correctly while the mirrored chat card showed the failure text. Asking again
-from text mode after the modal closed rendered correctly, because only one card
-was competing by then. The fallback link is always correct, so a visitor can
-still book — this degrades the written record, it does not block booking.
-
-**Suggested fix:** Give each embed its own Cal namespace
-(`cal('init', <unique-namespace>)` then mount through `Cal.ns[namespace]`),
-which `lib/calEmbed.ts:54-67` already builds the queue machinery for. Cheaper
-alternative: render the inline calendar only in the card that is actually
-visible and let the mirrored chat copy be link-only, since its job is to leave a
-written record rather than to be booked from twice.
-**Resolution:**
-
 ### F-09 [P3] open - The voice control bar derives behavior from a display string
 
 **File:** frontend/src/components/voice/VoiceAgentControlBar.tsx:26
@@ -90,4 +62,26 @@ switches the icon with no type error and nothing failing.
 `transport?: 'livekit' | 'assemblyai'` — and keep `mode` purely for display.
 Small and local: three call sites and one component. Not urgent, and out of
 scope for the F-04 fix, which only moved literals.
+**Resolution:**
+
+### F-10 [P3] open - loadCalNamespace is exported but has no callers
+
+**File:** frontend/src/lib/calEmbed.ts:118
+**Found:** 2026-09-21 by /audit (scope: current; lens: quality)
+**Why it matters:** The F-08 fix added `loadCalNamespace` while attempting the
+namespace approach, then abandoned that approach when embed.js turned out to
+instantiate namespaces only once at script load. The function survived the
+change and now has zero callers anywhere in `frontend/src`. Its docblock is
+genuinely valuable -- it records, with the exact source excerpt, why namespaces
+cannot solve this problem, which is the single most expensive thing learned
+during four failed attempts. But an exported function with no callers reads as
+available API, and the next person may reach for it precisely because it is
+named for the problem it cannot solve.
+**Suggested fix:** Keep the explanation, drop the code: move the docblock's
+content into a comment near `loadCalApi` (or into the `BookingCard` header
+where the ownership protocol is described) and delete the function. Alternative:
+keep it and mark it `@internal`/unused-by-design with an explicit pointer to
+`BookingCard`'s ownership comment. Either is fine; leaving a silently unused
+export is the option to avoid. Note `getCal` at line 79 is also unused, but it
+predates this fix and is out of scope for this entry.
 **Resolution:**
