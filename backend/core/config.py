@@ -41,6 +41,28 @@ def _get_int(name: str, default: int | None = None) -> int | None:
         raise ValueError(f"{name} must be an integer, got {raw!r}") from None
 
 
+def _get_bool(name: str, default: bool) -> bool:
+    raw = _get(name)
+    if raw is None:
+        return default
+    return raw.lower() in {"1", "true", "yes", "on"}
+
+
+def _get_csv(name: str, default: list[str]) -> list[str]:
+    """Comma-separated values, trimmed, empties dropped.
+
+    An unset or all-empty value yields the default rather than an empty list:
+    an empty CORS allowlist would silently reject every browser request, which
+    looks identical to a broken deployment.
+    """
+    raw = _get(name)
+    if raw is None:
+        return list(default)
+    items = [part.strip().rstrip("/") for part in raw.split(",")]
+    items = [part for part in items if part]
+    return items or list(default)
+
+
 # --- Owner identity -------------------------------------------------------
 OWNER_NAME = _get("OWNER_NAME", "Gichogu Macharia")
 GITHUB_USERNAME = _get("GITHUB_USERNAME", "Mr-Macharia")
@@ -107,6 +129,22 @@ LEADS_RATE_WINDOW = _get_int("LEADS_RATE_WINDOW", 300) or 300
 VOICE_TOOL_RATE_LIMIT = _get_int("VOICE_TOOL_RATE_LIMIT", 60) or 60
 VOICE_TOOL_RATE_WINDOW = _get_int("VOICE_TOOL_RATE_WINDOW", 60) or 60
 
+
+# --- Visitor sessions & CORS ---------------------------------------------
+# The browser is identified by an opaque HttpOnly cookie so a visitor's chat
+# history survives a reload and follows them across tabs. It is not a login:
+# clearing cookies or opening a private window is a new visitor.
+#
+# CORS must name exact origins. `allow_origins=["*"]` with
+# allow_credentials=True is rejected by browsers outright, so the cookie cannot
+# work without this allowlist.
+CORS_ALLOWED_ORIGINS = _get_csv("CORS_ALLOWED_ORIGINS", ["http://localhost:3000"])
+VISITOR_COOKIE_NAME = _get("VISITOR_COOKIE_NAME", "visitor_id") or "visitor_id"
+VISITOR_COOKIE_DAYS = _get_int("VISITOR_COOKIE_DAYS", 5) or 5
+# SameSite=None requires Secure, which requires HTTPS. Local development over
+# plain http must set this false or the browser drops the cookie. Production
+# must never run with it false.
+VISITOR_COOKIE_SECURE = _get_bool("VISITOR_COOKIE_SECURE", True)
 
 CALCOM_BOOKING_URL = _get(
     "CALCOM_BOOKING_URL", "https://cal.com/macharia/ai-and-automation-consultation"

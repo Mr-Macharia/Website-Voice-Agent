@@ -200,6 +200,9 @@ export default function useAIResponseStream() {
       try {
         const response = await fetch(apiUrl, {
           method: 'POST',
+          // Sends the visitor cookie so the run is stamped with the browser
+          // that made it, and lands in that visitor's session list.
+          credentials: 'include',
           headers: {
             // Set content-type only for non-FormData requests.
             ...(!(requestBody instanceof FormData) && {
