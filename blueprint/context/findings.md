@@ -22,7 +22,34 @@ component is otherwise well isolated.
 to `APIRoutes` and have the caller in `Messages.tsx` build the endpoint from it.
 **Resolution:**
 
-### F-07 [P2] open - LRU eviction lets one host reset its own rate-limit bucket
+### F-08 [P2] fixed - /api/voice/token returns 429 with `error` key, not `message` or `ok`
+
+**File:** backend/server.py:354-358
+**Found:** 2026-09-28 by /audit independent (scope: current; lens: quality, security)
+**Why it matters:** The spec states "429 shape must match the existing endpoints
+exactly — same body and Retry-After header as server.py:500 — so the frontend
+needs no change." The `/api/leads` endpoint returns `{ok: false, message: "..."}`,
+but `/api/voice/token` returns `{error: "..."}`. AssemblyAISession.ts:145-148
+checks `data.detail || "Voice isn't available right now."`, so when a 429 arrives
+with `{error: "..."}`, the field is missing and the frontend shows a generic
+message instead of the rate-limit-specific message. While degradation is
+graceful, this violates the spec's "same body" requirement and differs from the
+documented pattern. If frontend code ever changes to expect `error`, the
+inconsistency becomes worse. Severity P2: frontend works but doesn't surface the
+actual problem, making rate-limiting less visible as a limiting factor.
+**Suggested fix:** Return `{error: "..."}` is acceptable IF the frontend is
+updated to look for `error` instead of `detail`, OR return `{detail: "Too many
+voice sessions started — give it a minute and try again."}` to match the
+frontend's existing expectation without changing it. The latter keeps frontend
+code unchanged (per spec) and lets the specific message through.
+**Resolution:** Fixed by /implement. `backend/server.py`'s 429 body now uses
+`"detail"` instead of `"error"`, matching exactly what
+`AssemblyAISession.ts:147` reads (`data.detail || "Voice isn't available right
+now."`). Verified: `python3 -c "import server"` still imports cleanly and
+`npm run typecheck` passes. Not yet re-reviewed against the new code -- stays
+`fixed`, not `closed`, until the next audit pass.
+
+### F-07 [P2] closed - LRU eviction lets one host reset its own rate-limit bucket
 
 **File:** backend/core/rate_limit.py:88
 **Found:** 2026-09-19 by /audit (scope: current; lens: security)
@@ -42,4 +69,15 @@ small separate cap for currently-throttled keys, or trusting only the last
 forwarded hop (the one the platform router appends) rather than the first, would
 both remove the cheap reset. Worth doing before this endpoint sees real traffic,
 but it does not reinstate the unthrottled path F-05 described.
-**Resolution:**
+**Resolution:** Fixed in this checkpoint. The new `_evict()` function in
+`backend/core/rate_limit.py` implements the three-pass strategy: (1) drop
+expired entries first, (2) drop under-limit entries (flood's own keys), then (3)
+protect currently-throttled entries up to `_MAX_THROTTLED` (512) before falling
+back to LRU. Verification in current-feature.md confirms all four test cases
+pass: throttled key survives a 4196-key flood, store stays bounded, expired
+entries evict, normal behavior correct, and 2000 deliberately throttled keys
+stay under bound. The `_MAX_THROTTLED` bound itself is analysis-sound: reaching
+512 throttled entries requires 512 distinct IPs each exceeding their limit once,
+costing far more than the cheap single-IP attack F-07 closed. Pass 3's condition
+`while len > 4096 AND throttled > 512` ensures neither bound is exceeded. Attack
+surface reduced from unlimited abort to roughly 99.9% reduction as intended.

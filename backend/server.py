@@ -352,7 +352,10 @@ async def voice_token(request: Request):
             status_code=429,
             headers={"Retry-After": str(retry_after)},
             content={
-                "error": "Too many voice sessions started — give it a minute "
+                # AssemblyAISession.ts reads `data.detail` on a non-ok
+                # response (frontend/src/lib/voice/AssemblyAISession.ts:147) --
+                # this key, not "error", is what actually reaches the visitor.
+                "detail": "Too many voice sessions started — give it a minute "
                 "and try again.",
             },
         )
