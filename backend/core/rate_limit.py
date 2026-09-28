@@ -37,6 +37,11 @@ from core import config
 # cheaper than an unbounded dict.
 _MAX_TRACKED = 4096
 
+# Of those, how many may be *currently throttled* and therefore protected from
+# eviction. Small on purpose: it is the reserve that stops a flood clearing a
+# real throttle, not a second general-purpose store.
+_MAX_THROTTLED = 512
+
 _hits: "OrderedDict[str, tuple[int, float]]" = OrderedDict()
 
 
@@ -64,6 +69,63 @@ def client_key(request) -> str:
         return "unknown"
 
 
+def _evict(now: float, window_seconds: int, limit: int) -> None:
+    """Make room without letting a flood clear someone else's throttle.
+
+    Eviction order is a security property, not a tuning detail. Plain LRU let
+    one host clear its own throttle: the key comes from the client-controlled
+    `X-Forwarded-For` header, so flooding `_MAX_TRACKED` distinct values pushed
+    the attacker's own in-window entry out of the store and the next request
+    started a fresh allowance.
+
+    Expiry-first eviction alone does NOT fix that -- a flood's own entries are
+    all in-window too, so nothing is expired and it falls straight back to LRU.
+    That was measured, not assumed.
+
+    So entries that are currently over the limit are protected: they are only
+    evicted once they expire, or once the protected set itself exceeds
+    `_MAX_THROTTLED`. A flood evicts spent and under-limit buckets, which cost
+    nothing to lose, and cannot reach the bucket that is actively holding
+    someone back.
+
+    `_MAX_THROTTLED` keeps the protection itself bounded, since "throttled"
+    is a state an attacker can enter deliberately. Reaching it takes one full
+    limit-exceeding burst per protected key, which is far more expensive than
+    the single cheap flood this closes.
+
+    A later "cleanup" that restores `popitem(last=False)` here would silently
+    reintroduce the bypass.
+    """
+    if len(_hits) <= _MAX_TRACKED:
+        return
+
+    # Pass 1: drop expired entries, oldest first. They are spent.
+    for key in list(_hits):
+        if len(_hits) <= _MAX_TRACKED:
+            return
+        _, started = _hits[key]
+        if now - started >= window_seconds:
+            del _hits[key]
+
+    # Pass 2: drop live entries that are still under their limit, oldest
+    # first. A flood's own keys land here, which is the point.
+    throttled = 0
+    for key in list(_hits):
+        count, _ = _hits[key]
+        if count > limit:
+            throttled += 1
+            continue
+        if len(_hits) <= _MAX_TRACKED:
+            return
+        del _hits[key]
+
+    # Pass 3: everything left is throttled. Protect them up to a bound, then
+    # fall back to LRU so the store can never grow without limit.
+    while len(_hits) > _MAX_TRACKED and throttled > _MAX_THROTTLED:
+        _hits.popitem(last=False)
+        throttled -= 1
+
+
 def check(request, limit: int, window_seconds: int) -> Optional[int]:
     """Count this request. Returns seconds to wait when over the limit.
 
@@ -82,8 +144,8 @@ def check(request, limit: int, window_seconds: int) -> Optional[int]:
         _hits[key] = (count, started)
         _hits.move_to_end(key)
 
-        while len(_hits) > _MAX_TRACKED:
-            _hits.popitem(last=False)
+        if len(_hits) > _MAX_TRACKED:
+            _evict(now, window_seconds, limit)
 
         if count > limit:
             return max(1, int(window_seconds - (now - started)))
@@ -103,3 +165,5 @@ LEADS_LIMIT = config.LEADS_RATE_LIMIT
 LEADS_WINDOW = config.LEADS_RATE_WINDOW
 VOICE_TOOL_LIMIT = config.VOICE_TOOL_RATE_LIMIT
 VOICE_TOOL_WINDOW = config.VOICE_TOOL_RATE_WINDOW
+VOICE_TOKEN_LIMIT = config.VOICE_TOKEN_RATE_LIMIT
+VOICE_TOKEN_WINDOW = config.VOICE_TOKEN_RATE_WINDOW

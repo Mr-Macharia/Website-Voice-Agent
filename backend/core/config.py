@@ -128,6 +128,12 @@ LEADS_RATE_LIMIT = _get_int("LEADS_RATE_LIMIT", 5) or 5
 LEADS_RATE_WINDOW = _get_int("LEADS_RATE_WINDOW", 300) or 300
 VOICE_TOOL_RATE_LIMIT = _get_int("VOICE_TOOL_RATE_LIMIT", 60) or 60
 VOICE_TOOL_RATE_WINDOW = _get_int("VOICE_TOOL_RATE_WINDOW", 60) or 60
+# Minting a session token is what actually costs money: each one opens a billed
+# AssemblyAI streaming session. Generous because a client fetches a fresh token
+# for every connect INCLUDING reconnects, so a flaky network legitimately asks
+# several times in a row.
+VOICE_TOKEN_RATE_LIMIT = _get_int("VOICE_TOKEN_RATE_LIMIT", 30) or 30
+VOICE_TOKEN_RATE_WINDOW = _get_int("VOICE_TOKEN_RATE_WINDOW", 300) or 300
 
 
 # --- Visitor sessions & CORS ---------------------------------------------
