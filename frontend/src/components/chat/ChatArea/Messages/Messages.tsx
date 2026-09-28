@@ -14,6 +14,7 @@ import { Wrench, BrainCircuit, BookOpen } from 'lucide-react'
 import { parseToolPayload, toolResultText } from '@/lib/toolPayload'
 import { BookingCard } from './tools/BookingCard'
 import { LeadForm } from './tools/LeadForm'
+import { APIRoutes } from '@/api/routes'
 import { useStore } from '@/store'
 import { useQueryState } from 'nuqs'
 
@@ -182,7 +183,7 @@ const ToolCards = memo(({ message }: { message: ChatMessage }) => {
             <div key={key} className="w-full max-w-[88%]">
               <LeadForm
                 payload={payload}
-                endpoint={`${selectedEndpoint || 'http://localhost:7777'}/api/leads`}
+                endpoint={APIRoutes.SubmitLead(selectedEndpoint)}
                 sessionId={sessionId}
               />
             </div>

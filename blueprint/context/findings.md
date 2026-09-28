@@ -7,17 +7,19 @@
 > finding is `open` or `fixed`, then archives resolved findings with the work
 > and resets this file.
 
-### F-06 [P3] open - LeadForm inlines a backend fetch instead of using src/api
+### F-09 [P3] unverified - LiveKitVoiceModal inlines a Next.js API route fetch, not through src/api
 
-**File:** frontend/src/components/chat/ChatArea/Messages/tools/LeadForm.tsx:92
-**Found:** 2026-09-19 by /audit (scope: current; lens: quality)
-**Why it matters:** `coding-standards.md` states "API calls to the backend go
-through `src/api/` (`os.ts`, `routes.ts`); don't inline fetch calls to backend
-endpoints elsewhere." `LeadForm` builds its own URL and calls `fetch` directly,
-and `/api/leads` is absent from `APIRoutes`. Every other backend route in the
-app is declared there, so this is the one endpoint that will not be found by
-reading `routes.ts`. Low severity: the endpoint is passed in as a prop and the
-component is otherwise well isolated.
-**Suggested fix:** Add `SubmitLead: (agentOSUrl: string) => \`${agentOSUrl}/api/leads\``
-to `APIRoutes` and have the caller in `Messages.tsx` build the endpoint from it.
+**File:** frontend/src/components/voice/LiveKitVoiceModal.tsx:1641
+**Found:** 2026-09-28 by /audit (scope: current; lens: quality)
+**Why it matters:** Encountered while auditing F-06's fix, outside its scope.
+`fetch(`/api/livekit/token?room=${roomName}`)`, with a fallback to
+`${selectedEndpoint}/api/livekit/token`, is not the AgentOS backend pattern
+`coding-standards.md`'s `src/api/` rule targets (that rule is about calls to
+the Python backend; this primary call is to a same-server Next.js route).
+Unverified rather than open: it is inside the LiveKit fallback path, which is
+out of scope for both F-06 and this pass, and it is not certain the standard
+was intended to cover Next.js API routes as well as the Python backend.
+**Suggested fix:** If `src/api/` is meant to cover this class of call too,
+extend `APIRoutes` or add a sibling convention for local routes; otherwise
+mark it explicitly out of scope in `coding-standards.md`.
 **Resolution:**

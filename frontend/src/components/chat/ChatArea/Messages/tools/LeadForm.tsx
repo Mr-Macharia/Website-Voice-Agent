@@ -91,6 +91,10 @@ export const LeadForm: React.FC<LeadFormProps> = ({
     try {
       const res = await fetch(endpoint, {
         method: 'POST',
+        // Sends the visitor cookie so this lead is attributed to the same
+        // session the rest of the app scopes to (see lib/agentIdentity / the
+        // feature-17 cookie work) rather than being the one anonymous call.
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...values, session_id: sessionId ?? null })
       })
