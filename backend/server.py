@@ -335,12 +335,31 @@ ASSEMBLYAI_AGENTS_URL = "https://agents.assemblyai.com/v1"
 
 
 @base_app.get("/api/voice/token")
-async def voice_token():
+async def voice_token(request: Request):
     """Mint a single-use token and return it with the session config.
 
     Tokens are single-use and short-lived, so the client fetches a fresh one
     for every connection — including reconnects.
     """
+    # Public and unauthenticated, and every token opens a billed AssemblyAI
+    # streaming session, so this is the endpoint where abuse costs real money.
+    # Capped before the key is used, not after.
+    retry_after = rate_limit.check(
+        request, rate_limit.VOICE_TOKEN_LIMIT, rate_limit.VOICE_TOKEN_WINDOW
+    )
+    if retry_after is not None:
+        return JSONResponse(
+            status_code=429,
+            headers={"Retry-After": str(retry_after)},
+            content={
+                # AssemblyAISession.ts reads `data.detail` on a non-ok
+                # response (frontend/src/lib/voice/AssemblyAISession.ts:147) --
+                # this key, not "error", is what actually reaches the visitor.
+                "detail": "Too many voice sessions started — give it a minute "
+                "and try again.",
+            },
+        )
+
     if not core_config.ASSEMBLYAI_API_KEY:
         raise HTTPException(
             status_code=503,
