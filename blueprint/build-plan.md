@@ -59,7 +59,7 @@
        with CORS narrowed from a wildcard to an exact origin allowlist so
        credentialed cross-site requests work (`backend/server.py`)
 
-- [ ] 18. **Production deployment prep** - Vercel frontend and Heroku backend
+- [x] 18. **Production deployment prep** - Vercel frontend and Heroku backend
        config, env review, and the F-07 rate-limit hardening that must land
        before `/api/leads` is publicly reachable (`app.json`, `vercel.json`,
        `backend/core/rate_limit.py`)
