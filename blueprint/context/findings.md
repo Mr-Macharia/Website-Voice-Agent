@@ -24,7 +24,7 @@ extend `APIRoutes` or add a sibling convention for local routes; otherwise
 mark it explicitly out of scope in `coding-standards.md`.
 **Resolution:**
 
-### F-11 [P2] open - The localhost fallback pattern F-06 removed still exists in two voice call sites
+### F-11 [P2] fixed - The localhost fallback pattern F-06 removed still exists in two voice call sites
 
 **File:** frontend/src/components/voice/AssemblyAIVoiceModal.tsx:137, frontend/src/components/voice/LiveKitVoiceModal.tsx:732
 **Found:** 2026-09-29 by /audit (scope: full; lens: quality)

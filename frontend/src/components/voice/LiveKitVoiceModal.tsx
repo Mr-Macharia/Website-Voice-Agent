@@ -729,10 +729,7 @@ const DirectVoiceSession: React.FC<{
       console.warn('AudioContext initialization error:', err)
     }
 
-    const endpoint = (selectedEndpoint || 'http://localhost:7777').replace(
-      /\/+$/,
-      ''
-    )
+    const endpoint = selectedEndpoint.replace(/\/+$/, '')
     const wsUrl = endpoint.replace(/^http/, 'ws') + '/ws/voice'
     const ws = new WebSocket(wsUrl)
     ws.binaryType = 'arraybuffer'

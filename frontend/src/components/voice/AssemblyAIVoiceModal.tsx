@@ -134,7 +134,7 @@ export const AssemblyAIVoiceModal: React.FC<AssemblyAIVoiceModalProps> = ({
   useEffect(() => {
     if (!isOpen) return
 
-    const endpoint = selectedEndpoint || 'http://localhost:7777'
+    const endpoint = selectedEndpoint
     const session = new AssemblyAISession({
       onStateChange: (next, message) => {
         setState(next)
