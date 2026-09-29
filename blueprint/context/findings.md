@@ -78,3 +78,59 @@ invites someone to reintroduce frontend token minting.
 **Suggested fix:** Remove `livekit-server-sdk` from `frontend/package.json` and
 refresh the lockfile.
 **Resolution:**
+
+### F-17 [P3] open - Release phase removes document vectors whose files are not in the deployed slug
+
+**File:** backend/scripts/ingest.py:360
+**Found:** 2026-09-30 by /audit independent (scope: current; lens: quality)
+**Why it matters:** `content/documents/` is empty and untracked, so it does not
+exist on Heroku. Any document vectors previously loaded into production from a
+developer machine (`--source documents`) are treated as "removed files" and
+deleted on the next deploy. Intended sync semantics, but not stated in
+`docs/deployment.md`, which only says deleted files lose their vectors.
+**Suggested fix:** Document that the repo is the source of truth for markdown
+and document vectors (documents must be committed), or scope removal to
+markdown only when the documents dir is absent.
+**Resolution:**
+
+### F-18 [P3] open - Catch-all exit 0 hides programming errors and a delete-then-failed-insert gap
+
+**File:** backend/scripts/ingest.py:393
+**Found:** 2026-09-30 by /audit independent (scope: current; lens: quality)
+**Why it matters:** `except Exception` returns 0 for every error, including
+bugs (bad SQL, AttributeError), contradicting the docstring's "only a bug exits
+non-zero"; a broken sync would ship green on every deploy with only a log line.
+If an insert fails after `remove_vectors_by_name`, that file serves no vectors
+until the next deploy (self-heals because its name disappears from `stored`).
+`delete_by_name`'s False return is ignored.
+**Suggested fix:** Catch only connection/HTTP error types for exit 0, let other
+exceptions fail the release, and check the delete result before inserting.
+**Resolution:**
+
+### F-19 [P3] open - Manual markdown/documents ingest still uses unprefixed names
+
+**File:** backend/scripts/ingest.py:122
+**Found:** 2026-09-29 by /audit independent (scope: current; lens: quality)
+**Why it matters:** `ingest_markdown` and `ingest_documents` (used by
+`--source markdown|documents|all` and `--reindex`, all still in the module
+docstring) name rows `path.stem`, while the release phase uses `md:`/`doc:`.
+Running a documented manual ingest against production adds a second copy of
+every curated chunk alongside the `md:*` rows, doubling them in retrieval until
+the next deploy deletes the unprefixed rows and (after `--reindex`) re-embeds
+everything. No data loss; duplicate answers and embedding churn.
+**Suggested fix:** Reuse `_local_items()` names in `ingest_markdown` /
+`ingest_documents` (or route them through `replace_changed_local`).
+**Resolution:**
+
+### F-20 [P3] open - Removed or replaced vectors leave stale rows in the Agno contents table
+
+**File:** backend/scripts/ingest.py:365
+**Found:** 2026-09-29 by /audit independent (scope: current; lens: quality)
+**Why it matters:** `remove_vectors_by_name` deletes only vectors. The
+knowledge `contents_db` keeps its rows, so locally 64 contents entries include
+the legacy `bio`/`experience`/`faq`/`projects`/`skills` rows (some duplicated)
+next to the `md:*` rows, and every removed file will leave a ghost entry in the
+AgentOS knowledge view. Retrieval is unaffected.
+**Suggested fix:** Also remove the matching contents rows (Agno's content
+removal API by id/name) when a local item is replaced or removed.
+**Resolution:**

@@ -11,7 +11,7 @@
 - Embeddings, semantic search, cosine similarity and retrieval optimisation
 - Reporting, dashboards and operational visibility tools
 - Product-oriented technical delivery
-- Technical mentorship, enablement and workshop facilitation
+- Technical mentorship and enablement
 - Cross-functional collaboration and stakeholder communication
 - Strategy-informed solution design
 
@@ -48,7 +48,7 @@ AWS · GCP · Azure · Vertex AI · Git · GitHub · Docker · CI/CD
 ## Professional
 
 Technical documentation · cross-functional collaboration · stakeholder
-engagement · workshop facilitation · mentorship · problem-solving · strategic
+engagement · mentorship · problem-solving · strategic
 thinking · product-oriented execution
 
 ## Certifications

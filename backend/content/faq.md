@@ -94,12 +94,9 @@ meeting directly, or take your details and pass them on.
 
 Nairobi County, Kenya. East Africa Time, UTC+3.
 
-## Does he do training or workshops?
+## Has he mentored anyone?
 
-Yes. He has delivered AI system development lessons, workshops and
-implementation guidance through Gich AI Nexus, mentored students and bootcamp
-graduates through TechHut, and mentored a hackathon team through SecretStartups
-that placed second.
+Yes. He mentored a hackathon team through SecretStartups that placed second.
 
 ## What has he built for clients?
 

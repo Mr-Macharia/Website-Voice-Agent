@@ -8,10 +8,18 @@ boot on a web crawl or a GitHub round trip.
     uv run python scripts/ingest.py --source markdown
     uv run python scripts/ingest.py --source github --force
     uv run python scripts/ingest.py --reindex          # rebuild from scratch
+    uv run python scripts/ingest.py --source local --replace-changed
 
 Idempotency is Agno's, not ours: add_content() hashes each item and
 skip_if_exists=True means unchanged content costs zero embedding calls. Re-run
 freely while writing content.
+
+But neither skip_if_exists nor --force removes chunks a file no longer
+contains, so an edited file keeps answering from its old text. --replace-changed
+fixes that for local files (markdown + documents): it hashes each file, deletes
+the old vectors of any file whose hash changed, re-inserts it, and deletes the
+vectors of files that were removed. It is what the Heroku release phase runs,
+so it never fails a deploy over an outage — it logs and exits 0.
 """
 
 from __future__ import annotations
@@ -270,12 +278,137 @@ SOURCES = {
     "documents": ingest_documents,
 }
 
+# Sources that live in the repo, and so can be kept exactly in sync on deploy.
+LOCAL_SOURCES = ("markdown", "documents")
+_LOCAL_SOURCE_TYPES = ("markdown", "document")
+
+
+# --- Replace changed local files -------------------------------------------
+def _local_items() -> list[dict]:
+    """Every local file that should be indexed, with how to load it."""
+    from agno.knowledge.reader.markdown_reader import MarkdownReader
+
+    items = []
+    for path in sorted(config.CONTENT_DIR.glob("*.md")):
+        text = path.read_text(encoding="utf-8")
+        if _is_unfilled_template(text):
+            continue
+        items.append({
+            # Prefixed so no local file can share a name with another local
+            # file or with a github-*/website row: delete_by_name ignores type.
+            "name": f"md:{path.stem}", "path": path,
+            "reader": MarkdownReader(chunking_strategy=_chunking()),
+            "metadata": {"source": path.stem, "source_type": "markdown"},
+        })
+
+    doc_dir = config.DOCUMENTS_DIR
+    if doc_dir.exists():
+        for path in sorted(doc_dir.iterdir()):
+            if path.suffix.lower() in {".pdf", ".docx", ".txt", ".md"}:
+                items.append({
+                    "name": f"doc:{path.name}", "path": path, "reader": None,
+                    "metadata": {"source": path.name, "source_type": "document"},
+                })
+    return items
+
+
+def _stored_hashes(kb) -> dict[str, set]:
+    """name -> the file hashes its stored vectors were built from.
+
+    Vectors from before this mode carry no hash, so they read as changed and
+    are replaced once.
+    """
+    from sqlalchemy import text
+
+    vdb = kb.vector_db
+    sql = text(
+        f'SELECT name, meta_data->>\'file_sha256\' FROM "{vdb.schema}"."{vdb.table_name}" '
+        "WHERE meta_data->>'source_type' = ANY(:types)"
+    )
+    stored: dict[str, set] = {}
+    with vdb.db_engine.connect() as conn:
+        for name, sha in conn.execute(sql, {"types": list(_LOCAL_SOURCE_TYPES)}):
+            stored.setdefault(name, set()).add(sha)
+    return stored
+
+
+def replace_changed_local(kb) -> tuple[int, int]:
+    """Sync local files into the index. Returns (replaced, removed)."""
+    import hashlib
+
+    stored = _stored_hashes(kb)
+    items = _local_items()
+    replaced = 0
+
+    for item in items:
+        sha = hashlib.sha256(item["path"].read_bytes()).hexdigest()
+        if stored.get(item["name"]) == {sha}:
+            continue
+        # Delete first: an upsert alone leaves chunks the file no longer has.
+        kb.remove_vectors_by_name(item["name"])
+        kwargs = {"reader": item["reader"]} if item["reader"] else {}
+        kb.add_content(
+            name=item["name"],
+            path=str(item["path"]),
+            metadata={**item["metadata"], "file_sha256": sha},
+            skip_if_exists=False,
+            upsert=True,
+            **kwargs,
+        )
+        logger.info("  replaced %s", item["path"].name)
+        replaced += 1
+
+    removed = 0
+    for name in sorted(set(stored) - {i["name"] for i in items}):
+        kb.remove_vectors_by_name(name)
+        logger.info("  removed  %s (file no longer exists)", name)
+        removed += 1
+
+    return replaced, removed
+
+
+def _run_replace_changed(args) -> int:
+    """The release-phase path. A deploy must not fail because DeepInfra or the
+    database blinked: the previous vectors keep serving and the next deploy
+    retries. Only a bug (an exception escaping this function) exits non-zero.
+    """
+    if args.source != "local" or args.force or args.reindex:
+        logger.error("--replace-changed needs --source local, and cannot be "
+                     "combined with --force or --reindex.")
+        return 2
+
+    if not config.knowledge_available():
+        logger.warning("Knowledge not configured (missing %s) — skipping ingestion.",
+                       ", ".join(config.missing_for("knowledge")))
+        return 0
+
+    try:
+        db.init_schema()
+        kb = knowledge.get_knowledge()
+        if kb is None:
+            logger.warning("Knowledge base unavailable — skipping ingestion.")
+            return 0
+        replaced, removed = replace_changed_local(kb)
+        if replaced:
+            db.create_vector_indexes()
+    except Exception as e:  # outage, not a bug: keep the old index serving
+        logger.error("Ingestion skipped, old index still serving: %s", e)
+        return 0
+
+    logger.info("\nLocal content in sync: replaced %d, removed %d.", replaced, removed)
+    return 0
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument(
-        "--source", default="all", choices=[*SOURCES, "all"],
-        help="Which source to ingest (default: all)",
+        "--source", default="all", choices=[*SOURCES, "local", "all"],
+        help="Which source to ingest (default: all; local = markdown + documents)",
+    )
+    parser.add_argument(
+        "--replace-changed", action="store_true",
+        help="Local sources only: replace edited files' vectors and drop deleted "
+        "files'. Never exits non-zero on an outage (used by the Heroku release phase).",
     )
     parser.add_argument(
         "--force", action="store_true",
@@ -286,6 +419,9 @@ def main() -> int:
         help="Drop the vector table and rebuild. Required after changing EMBED_MODEL.",
     )
     args = parser.parse_args()
+
+    if args.replace_changed:
+        return _run_replace_changed(args)
 
     if not config.knowledge_available():
         logger.error(
@@ -321,7 +457,7 @@ def main() -> int:
             logger.error("Could not recreate vector table: %s", e)
             return 1
 
-    selected = list(SOURCES) if args.source == "all" else [args.source]
+    selected = {"all": list(SOURCES), "local": list(LOCAL_SOURCES)}.get(args.source, [args.source])
     total = 0
     for name in selected:
         logger.info("\n%s:", name)

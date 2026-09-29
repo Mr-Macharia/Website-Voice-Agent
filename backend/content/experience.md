@@ -62,24 +62,7 @@ What the practice offers:
 Client work has included building a website for a pharmaceutical business,
 developing an online stock and website management platform for product
 management, and building a website for a hygiene and cleaning company. He has
-also delivered AI system development lessons, workshops and implementation
-guidance, and supported SMEs and teams adopting AI in operational settings.
-
-## Business Strategist — TechHut (June 2025 – November 2025)
-
-Nairobi, Kenya.
-
-Contributed to strategy and learner-support initiatives focused on practical
-growth systems and opportunity creation.
-
-- Contributed to student mentorship and development initiatives for learners
-  from schools and bootcamps.
-- Designed a GRIT management system to support structure, accountability and
-  learner growth.
-- Introduced a partnership approach helping students access three-month
-  internship opportunities with startups.
-- Contributed to ecosystem-building connecting student development with
-  practical industry exposure.
+also supported SMEs and teams adopting AI in operational settings.
 
 ## Team Lead — Apeli Solutions (Aug 2024 – Jan 2025)
 
@@ -97,20 +80,6 @@ Nairobi, Kenya.
 - Worked on communication planning and audience engagement.
 - Contributed to outreach and stakeholder-facing activities.
 
-## Monitoring and Evaluation Attachee — Women Enterprise Fund (June 2022 – September 2022)
-
-- Collected and organised programme data.
-- Supported reporting and information preparation for decision-making.
-- Contributed to structured data handling and documentation.
-- Assisted with programme tracking and information management.
-
-## Delivery Manager and Accountant — Drip Industries (Apr 2019 – Nov 2020)
-
-Earlier role, outside tech.
-
-- Managed logistics and customer-facing follow-up.
-- Maintained records and operational information.
-- Supported financial and operational tracking in Excel.
 
 ## Volunteering
 
@@ -131,4 +100,3 @@ Dec 2023. Second Upper-Class Honours. Active in AIESEC.
 
 - Promoted from AI Engineer to Lead Developer at Visiondrill.
 - Mentored a hackathon team that placed second nationally.
-- Second Upper-Class Honours at JKUAT.

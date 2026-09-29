@@ -42,6 +42,20 @@ settings, and the LiveKit variables (`LIVEKIT_URL`, `LIVEKIT_API_KEY`,
 `NEXT_PUBLIC_VOICE_PROVIDER=livekit`). LiveKit tokens are minted here, behind
 the rate limiter, so these belong on Heroku only.
 
+### Knowledge base re-ingestion
+
+`backend/Procfile` has a `release` phase that runs
+`python scripts/ingest.py --source local --replace-changed` on every deploy.
+Edit `backend/content/*.md` or `content/documents/`, commit, push, and the
+agent's knowledge follows: changed files have their old vectors replaced,
+deleted files have theirs removed, and unchanged files cost no embedding
+calls. The release log ends with `Local content in sync: replaced N, removed M.`
+
+It never fails a deploy. If DeepInfra or Postgres is unavailable it logs the
+error, the previous vectors keep serving, and the next deploy retries. GitHub
+and website sources are not re-ingested on deploy; run
+`scripts/ingest.py --source github` (or `website`) by hand when needed.
+
 ## Frontend (Vercel)
 
 Project settings (there is no `vercel.json`; the dashboard is the config):
