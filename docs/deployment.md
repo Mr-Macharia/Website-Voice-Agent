@@ -44,14 +44,21 @@ the rate limiter, so these belong on Heroku only.
 
 ## Frontend (Vercel)
 
-`vercel.json` sets the build to run inside `frontend/`. Set before the first
-build:
+Project settings (there is no `vercel.json`; the dashboard is the config):
 
-- `NEXT_PUBLIC_AGENT_OS_URL` — the Heroku app URL, no trailing slash.
+- **Root Directory:** `frontend`.
+- **Install Command:** override to `npm install`. `frontend/` also holds a
+  `pnpm-lock.yaml`, and without the override Vercel may pick pnpm.
+- **Build Command / Output Directory:** leave on the Next.js defaults.
+
+Environment variables. `NEXT_PUBLIC_*` values are baked in at build time, so
+redeploy after changing them:
+
+- `NEXT_PUBLIC_AGENT_OS_URL` — the Heroku app URL, no trailing slash. The only
+  required variable.
 - `NEXT_PUBLIC_VOICE_PROVIDER` — omit for AssemblyAI (the default).
-- `DEEPGRAM_API_KEY` — only for the LiveKit fallback path.
-- Do not set `LIVEKIT_*` here. The frontend fetches LiveKit tokens from the
-  backend and never signs them itself.
+- Set no secrets here (`LIVEKIT_*`, `DEEPGRAM_API_KEY`, and so on). The
+  frontend calls the backend for everything and holds no keys.
 
 ## Order
 

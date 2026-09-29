@@ -4,8 +4,8 @@ import type { NextConfig } from 'next'
 
 // The project keeps a single source of truth for secrets in the repo-root
 // .env, but Next.js only auto-loads .env files from the frontend directory.
-// Without this, LIVEKIT_API_KEY/SECRET fall back to the "devkey" defaults and
-// the browser gets "invalid API key" from LiveKit Cloud.
+// Without this, local dev would miss NEXT_PUBLIC_AGENT_OS_URL and friends.
+// On Vercel there is no root .env; variables come from the project settings.
 function loadRootEnv() {
   const rootEnv = path.join(__dirname, '..', '.env')
   if (!fs.existsSync(rootEnv)) return
@@ -41,13 +41,7 @@ const nextConfig: NextConfig = {
   // Multiple lockfiles exist above this directory, so Next would otherwise
   // infer the home directory as the workspace root. Pin it to this project.
   outputFileTracingRoot: path.join(__dirname),
-  devIndicators: false,
-  // NEXT_PUBLIC_* must be inlined at build time; it is read from the root .env
-  // above, after Next has already done its own env loading.
-  env: {
-    NEXT_PUBLIC_LIVEKIT_URL:
-      process.env.NEXT_PUBLIC_LIVEKIT_URL || process.env.LIVEKIT_URL || ''
-  }
+  devIndicators: false
 }
 
 export default nextConfig
