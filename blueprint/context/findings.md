@@ -67,21 +67,14 @@ remove `/api/voice/token` from `_NO_COOKIE_PATHS` and add `credentials:
 'include'` to its fetch, matching every other browser-initiated call.
 **Resolution:**
 
-### F-14 [P2] open - The Next.js LiveKit token route mints unthrottled tokens on Vercel
+### F-15 [P3] open - `livekit-server-sdk` is now an unused frontend dependency
 
-**File:** frontend/src/app/api/livekit/token/route.ts
-**Found:** 2026-09-29 by /fix F-10 (scope: frontend/src/app/api/livekit; lens: security)
-**Why it matters:** `LiveKitVoiceModal.tsx:1641` calls this same-origin route
-*first* and only falls back to the Python `/api/livekit/token` when it
-fails, so this is the primary LiveKit token path. It signs a 1-hour token
-with room-join/publish grants and embeds an agent dispatch, and accepts a
-client-chosen `identity` and `room`. It has no rate limit, and Vercel's
-serverless functions share no memory, so the in-process Python limiter
-cannot cover it. Exposure is conditional: the route returns 500 unless
-`LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` and a LiveKit URL are set on Vercel,
-and the default voice path is AssemblyAI.
-**Suggested fix:** Either keep LiveKit credentials off Vercel unless the
-fallback is actively in use (and say so in `docs/deployment.md`), or route
-the fallback's token minting through the rate-limited Python endpoint once
-it can embed the same agent dispatch.
+**File:** frontend/package.json:30
+**Found:** 2026-09-29 by /audit independent (scope: current; lens: quality)
+**Why it matters:** The deleted `api/livekit/token/route.ts` was the only
+importer of `livekit-server-sdk`; no file under `frontend/src` imports it now.
+It keeps a server-side signing SDK in the Vercel bundle's dependency set and
+invites someone to reintroduce frontend token minting.
+**Suggested fix:** Remove `livekit-server-sdk` from `frontend/package.json` and
+refresh the lockfile.
 **Resolution:**

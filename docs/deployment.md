@@ -37,8 +37,10 @@ Every variable is declared in `app.json` with a description. Required:
 
 Optional, with working defaults: the cookie name/expiry, all four rate-limit
 pairs, `SITE_URL`, the alternate model providers, the lead-notification SMTP
-settings, and the LiveKit variables (only used when the frontend runs
-`NEXT_PUBLIC_VOICE_PROVIDER=livekit`).
+settings, and the LiveKit variables (`LIVEKIT_URL`, `LIVEKIT_API_KEY`,
+`LIVEKIT_API_SECRET`; only used when the frontend runs
+`NEXT_PUBLIC_VOICE_PROVIDER=livekit`). LiveKit tokens are minted here, behind
+the rate limiter, so these belong on Heroku only.
 
 ## Frontend (Vercel)
 
@@ -47,8 +49,9 @@ build:
 
 - `NEXT_PUBLIC_AGENT_OS_URL` — the Heroku app URL, no trailing slash.
 - `NEXT_PUBLIC_VOICE_PROVIDER` — omit for AssemblyAI (the default).
-- `NEXT_PUBLIC_LIVEKIT_URL`, `LIVEKIT_*`, `DEEPGRAM_API_KEY` — only for the
-  LiveKit fallback path.
+- `DEEPGRAM_API_KEY` — only for the LiveKit fallback path.
+- Do not set `LIVEKIT_*` here. The frontend fetches LiveKit tokens from the
+  backend and never signs them itself.
 
 ## Order
 

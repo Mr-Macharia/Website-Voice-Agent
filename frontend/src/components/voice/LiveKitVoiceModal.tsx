@@ -1635,12 +1635,11 @@ export const LiveKitVoiceModal: React.FC<LiveKitVoiceModalProps> = ({
       const roomName = `voice-agent-room-${crypto.randomUUID()}`
 
       try {
-        let res = await fetch(`/api/livekit/token?room=${roomName}`)
-        if (!res.ok) {
-          res = await fetch(
-            `${selectedEndpoint}/api/livekit/token?room=${roomName}`
-          )
-        }
+        // Backend only: it rate-limits token minting and embeds the agent
+        // dispatch. A same-origin Next route on Vercel could do neither.
+        const res = await fetch(
+          `${selectedEndpoint}/api/livekit/token?room=${roomName}`
+        )
 
         if (res.ok) {
           const data = await res.json()
@@ -1666,7 +1665,7 @@ export const LiveKitVoiceModal: React.FC<LiveKitVoiceModalProps> = ({
           console.warn(
             `[Voice] LiveKit not configured (url="${url}") — using the legacy ` +
               'WebSocket bridge, which has no semantic turn detection. Set ' +
-              'NEXT_PUBLIC_LIVEKIT_URL / LIVEKIT_API_KEY / LIVEKIT_API_SECRET.'
+              'LIVEKIT_URL / LIVEKIT_API_KEY / LIVEKIT_API_SECRET on the backend.'
           )
         }
 

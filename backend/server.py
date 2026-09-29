@@ -607,6 +607,11 @@ async def generate_livekit_token(
             .with_identity(user_identity) \
             .with_name(user_name) \
             .with_grants(api.VideoGrants(room_join=True, room=room, can_publish=True, can_subscribe=True, can_publish_data=True)) \
+            .with_room_config(api.RoomConfiguration(agents=[
+                # The worker is explicit-dispatch: without this the visitor
+                # joins a room the agent never enters.
+                api.RoomAgentDispatch(agent_name=core_config.LIVEKIT_AGENT_NAME),
+            ])) \
             .to_jwt()
 
         return {

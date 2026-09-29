@@ -171,6 +171,12 @@ LEAD_SMTP_PORT = _get_int("LEAD_SMTP_PORT", 587)
 LEAD_SMTP_USER = _get("LEAD_SMTP_USER")
 LEAD_SMTP_APP_PASSWORD = _get("LEAD_SMTP_APP_PASSWORD")
 
+# --- LiveKit --------------------------------------------------------------
+# The worker registers under this name as an explicit-dispatch agent, so it
+# only joins rooms whose token names it. One constant keeps the token's
+# dispatch and the worker's registration from drifting apart.
+LIVEKIT_AGENT_NAME = "voice-agent"
+
 # --- LLM (unchanged from existing behaviour) ------------------------------
 # DeepSeek's own API (not the Bedrock-hosted deepseek.v3.2, which could not
 # emit tool calls — see voice/llm_proxy.py). deepseek-flash is V4.1-Flash, a

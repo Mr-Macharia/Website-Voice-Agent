@@ -33,6 +33,7 @@ from livekit.agents import (
 )
 from livekit.plugins import deepgram, silero
 
+from core import config as core_config
 from core import guardrails, persona
 from core.adapters import livekit as lk_tools
 
@@ -306,7 +307,7 @@ def prewarm(proc):
 server.setup_fnc = prewarm
 
 
-@server.rtc_session(agent_name="voice-agent")
+@server.rtc_session(agent_name=core_config.LIVEKIT_AGENT_NAME)
 async def entrypoint(ctx):
     _quiet_noisy_loggers()
     _widen_playback_buffer()
