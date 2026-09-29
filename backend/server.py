@@ -345,7 +345,10 @@ async def voice_token(request: Request):
     # streaming session, so this is the endpoint where abuse costs real money.
     # Capped before the key is used, not after.
     retry_after = rate_limit.check(
-        request, rate_limit.VOICE_TOKEN_LIMIT, rate_limit.VOICE_TOKEN_WINDOW
+        request,
+        rate_limit.VOICE_TOKEN_LIMIT,
+        rate_limit.VOICE_TOKEN_WINDOW,
+        scope="voice_token",
     )
     if retry_after is not None:
         return JSONResponse(
@@ -445,7 +448,7 @@ async def submit_lead(req: LeadFormRequest, request: Request):
     # Public and unauthenticated: every accepted request writes a row and
     # emails the owner, so the count has to be capped before any work happens.
     retry_after = rate_limit.check(
-        request, rate_limit.LEADS_LIMIT, rate_limit.LEADS_WINDOW
+        request, rate_limit.LEADS_LIMIT, rate_limit.LEADS_WINDOW, scope="leads"
     )
     if retry_after is not None:
         return JSONResponse(
@@ -517,7 +520,10 @@ async def voice_tool(req: VoiceToolRequest, request: Request):
     # conversation never reaches it, and the failure stays speakable so the
     # agent recovers out loud rather than going silent.
     if rate_limit.check(
-        request, rate_limit.VOICE_TOOL_LIMIT, rate_limit.VOICE_TOOL_WINDOW
+        request,
+        rate_limit.VOICE_TOOL_LIMIT,
+        rate_limit.VOICE_TOOL_WINDOW,
+        scope="voice_tool",
     ) is not None:
         return {
             "result": "That tool is being called too quickly. Tell the visitor "
@@ -564,10 +570,31 @@ class TokenRequest(BaseModel):
 @base_app.post("/api/livekit/token")
 @base_app.get("/api/livekit/token")
 async def generate_livekit_token(
+    request: Request,
     room: str = Query("voice-agent-room"),
     identity: Optional[str] = Query(None),
     name: Optional[str] = Query(None)
 ):
+    # Same exposure as /api/voice/token: public, unauthenticated, and every
+    # token opens a metered voice session. Reuses that endpoint's limit (one
+    # session per call on either transport) under its own scope, so the two
+    # transports never share a bucket.
+    retry_after = rate_limit.check(
+        request,
+        rate_limit.VOICE_TOKEN_LIMIT,
+        rate_limit.VOICE_TOKEN_WINDOW,
+        scope="livekit_token",
+    )
+    if retry_after is not None:
+        return JSONResponse(
+            status_code=429,
+            headers={"Retry-After": str(retry_after)},
+            content={
+                "detail": "Too many voice sessions started — give it a minute "
+                "and try again.",
+            },
+        )
+
     try:
         user_identity = identity or f"user-{uuid.uuid4().hex[:8]}"
         user_name = name or user_identity

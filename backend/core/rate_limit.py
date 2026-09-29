@@ -17,6 +17,13 @@ worth stating:
   - Memory is bounded on purpose (see `_MAX_TRACKED`). An unbounded dict keyed
     on client IP is itself a memory-growth vector on a public endpoint.
 
+Counters are per endpoint. Each entry is keyed `scope:client` and stores the
+limit and window it is counted under, so one endpoint's traffic never spends
+another's allowance, and eviction judges every entry by its own rules. A single
+shared counter once blocked a real visitor's first lead after a few voice tool
+calls, and let a flood on a generous endpoint evict a throttle earned on a
+strict one.
+
 Cookies are deliberately not used as the key. A cookie is a header the client
 writes, so an abuser either omits it or rotates it per request; keying on one
 would be a limiter with a one-line bypass.
@@ -42,7 +49,8 @@ _MAX_TRACKED = 4096
 # real throttle, not a second general-purpose store.
 _MAX_THROTTLED = 512
 
-_hits: "OrderedDict[str, tuple[int, float]]" = OrderedDict()
+# key -> (count, window_started, limit, window_seconds)
+_hits: "OrderedDict[str, tuple[int, float, int, int]]" = OrderedDict()
 
 
 def client_key(request) -> str:
@@ -69,7 +77,7 @@ def client_key(request) -> str:
         return "unknown"
 
 
-def _evict(now: float, window_seconds: int, limit: int) -> None:
+def _evict(now: float) -> None:
     """Make room without letting a flood clear someone else's throttle.
 
     Eviction order is a security property, not a tuning detail. Plain LRU let
@@ -93,8 +101,14 @@ def _evict(now: float, window_seconds: int, limit: int) -> None:
     limit-exceeding burst per protected key, which is far more expensive than
     the single cheap flood this closes.
 
-    A later "cleanup" that restores `popitem(last=False)` here would silently
-    reintroduce the bypass.
+    Every entry is judged by the limit and window it was counted under, never
+    by the caller's. Judging by the caller's let a flood on `/api/voice/tool`
+    (limit 60) treat a throttled `/api/leads` entry (count 6, limit 5) as
+    under-limit and evict it -- the same bypass, arriving through a different
+    endpoint.
+
+    A later "cleanup" that restores `popitem(last=False)` here, or passes the
+    caller's limit back in, would silently reintroduce the bypass.
     """
     if len(_hits) <= _MAX_TRACKED:
         return
@@ -103,7 +117,7 @@ def _evict(now: float, window_seconds: int, limit: int) -> None:
     for key in list(_hits):
         if len(_hits) <= _MAX_TRACKED:
             return
-        _, started = _hits[key]
+        _, started, _, window_seconds = _hits[key]
         if now - started >= window_seconds:
             del _hits[key]
 
@@ -111,7 +125,7 @@ def _evict(now: float, window_seconds: int, limit: int) -> None:
     # first. A flood's own keys land here, which is the point.
     throttled = 0
     for key in list(_hits):
-        count, _ = _hits[key]
+        count, _, limit, _ = _hits[key]
         if count > limit:
             throttled += 1
             continue
@@ -126,26 +140,32 @@ def _evict(now: float, window_seconds: int, limit: int) -> None:
         throttled -= 1
 
 
-def check(request, limit: int, window_seconds: int) -> Optional[int]:
-    """Count this request. Returns seconds to wait when over the limit.
+def check(
+    request, limit: int, window_seconds: int, scope: str
+) -> Optional[int]:
+    """Count this request against `scope`. Returns seconds to wait when over.
 
     `None` means allowed. Non-raising by contract: any internal failure allows
     the request rather than taking a working endpoint down.
+
+    `scope` names the endpoint and is required with no default: a call site
+    that forgets it fails at its first request instead of quietly sharing a
+    bucket with every other endpoint.
     """
     try:
-        key = client_key(request)
+        key = f"{scope}:{client_key(request)}"
         now = time.monotonic()
 
-        count, started = _hits.get(key, (0, now))
+        count, started, _, _ = _hits.get(key, (0, now, limit, window_seconds))
         if now - started >= window_seconds:
             count, started = 0, now
 
         count += 1
-        _hits[key] = (count, started)
+        _hits[key] = (count, started, limit, window_seconds)
         _hits.move_to_end(key)
 
         if len(_hits) > _MAX_TRACKED:
-            _evict(now, window_seconds, limit)
+            _evict(now)
 
         if count > limit:
             return max(1, int(window_seconds - (now - started)))
