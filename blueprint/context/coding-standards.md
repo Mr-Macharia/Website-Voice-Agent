@@ -11,7 +11,7 @@ Two independently runnable services in one repo:
   agent and HTTP API (`server.py`); a separate LiveKit worker process serves the
   real-time voice agent (`livekit_worker.py`); a FastMCP server exposes the same
   tools to external MCP clients (`voice_mcp/`).
-- `frontend/` - Next.js 15 App Router, pnpm-managed, the chat + voice UI.
+- `frontend/` - Next.js 15 App Router, npm-managed, the chat + voice UI.
 - `backend/core/` is the shared implementation both the text agent, voice
   agent, and MCP server import from: `persona.py` (one identity, channel-specific
   formatting), `config.py` (every setting, feature-flag helpers), `knowledge.py`

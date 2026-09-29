@@ -65,11 +65,7 @@ else
   WORKER_CMD=(python "livekit_worker.py" "$WORKER_MODE")
 fi
 
-if command -v pnpm &>/dev/null; then
-  FRONTEND_CMD=(pnpm dev)
-else
-  FRONTEND_CMD=(npm run dev)
-fi
+FRONTEND_CMD=(npm run dev)
 
 # Colors (use $'' for proper ESC)
 C_BACKEND=$'\033[38;5;208m'

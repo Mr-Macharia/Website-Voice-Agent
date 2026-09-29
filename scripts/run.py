@@ -57,9 +57,6 @@ COLORS = {
 def has_uv() -> bool:
     return shutil.which("uv") is not None
 
-def has_pnpm() -> bool:
-    return shutil.which("pnpm") is not None
-
 def load_dotenv_keys() -> dict:
     keys: dict = {}
     for p in [ROOT / ".env", BACKEND_DIR / ".env", ROOT / ".env.example"]:
@@ -184,7 +181,6 @@ def main():
     print(f"{COLORS['dim']}voice-agent runner — root={ROOT}{COLORS['reset']}")
     env_warnings()
     use_uv = has_uv()
-    use_pnpm = has_pnpm()
 
     # Check LiveKit config early — if missing, disable worker gracefully
     keys = load_dotenv_keys()
@@ -230,19 +226,14 @@ def main():
 
         if run_frontend:
             # frontend env: ensure NEXT_PUBLIC_LIVEKIT_URL etc are read from root .env if present
-            if use_pnpm:
-                cmd = ["pnpm", "dev", "--port", str(args.frontend_port)]
-                # pnpm dev in frontend/package.json already sets -p 3000, but allow override via env PORT
-                # Use npx next dev -p explicitly for custom port
+            if shutil.which("npm"):
+                # `npm run dev` pins port 3000; call next directly for any other port.
+                cmd = ["npm", "run", "dev"]
                 if args.frontend_port != 3000:
-                    cmd = ["pnpm", "exec", "next", "dev", "-p", str(args.frontend_port)]
+                    cmd = ["npx", "next", "dev", "-p", str(args.frontend_port)]
             else:
-                # fallback npm
-                if shutil.which("npm"):
-                    cmd = ["npm", "run", "dev"]
-                else:
-                    print(f"{COLORS['red']}[frontend] neither pnpm nor npm found{COLORS['reset']}")
-                    cmd = []
+                print(f"{COLORS['red']}[frontend] npm not found{COLORS['reset']}")
+                cmd = []
             if cmd:
                 spawn("frontend", cmd, FRONTEND_DIR)
 

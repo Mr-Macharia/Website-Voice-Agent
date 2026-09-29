@@ -102,7 +102,7 @@ cd backend && uv run python server.py
 # Terminal 2 — LiveKit worker
 cd backend && uv run python livekit_worker.py dev
 # Terminal 3 — Frontend
-cd frontend && pnpm dev
+cd frontend && npm run dev
 ```
 
 ---

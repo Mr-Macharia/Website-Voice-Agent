@@ -250,7 +250,7 @@ checks do not make the Blueprint unusable.
 ## Commands
 
 Two services: a Python backend (`backend/`, `uv`-managed) and a Next.js
-frontend (`frontend/`, pnpm-managed). Root `package.json` scripts orchestrate
+frontend (`frontend/`, npm-managed; `package-lock.json` is the only lockfile). Root `package.json` scripts orchestrate
 both.
 
 - Dev (backend + worker, no frontend): `npm run dev`

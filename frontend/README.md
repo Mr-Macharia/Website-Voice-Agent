@@ -48,13 +48,13 @@ cd agent-ui
 2. Install dependencies:
 
 ```bash
-pnpm install
+npm install
 ```
 
 3. Start the development server:
 
 ```bash
-pnpm dev
+npm run dev
 ```
 
 4. Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
