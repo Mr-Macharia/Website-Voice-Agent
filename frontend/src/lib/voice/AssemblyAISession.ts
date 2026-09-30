@@ -66,6 +66,17 @@ const SAMPLE_RATE = 24000
  * output.volume on the stored agent (0-100).
  */
 const OUTPUT_GAIN = 1.0
+/**
+ * Cushion, in seconds, before a reply chunk that arrives to an empty queue.
+ *
+ * Chunks arrive over the network unevenly. Scheduling one at "now" when the
+ * queue has drained leaves no slack, so the next late chunk opens an audible
+ * gap (often a click) — repeatedly, on an uneven connection. Starting slightly
+ * ahead buys room for that jitter. The cost is this much extra delay before
+ * the first word of a reply and after any stall; chunks that arrive while
+ * audio is still queued are unaffected.
+ */
+const PLAYBACK_LEAD_S = 0.15
 
 export class AssemblyAISession {
   private ws: WebSocket | null = null
@@ -500,9 +511,10 @@ export class AssemblyAISession {
       source.onended = () => this.outputSources.delete(source)
 
       // Schedule on the cursor, never "now": chunks arrive faster than they
-      // play, so playing on arrival would overlap them into noise.
+      // play, so playing on arrival would overlap them into noise. A drained
+      // queue restarts PLAYBACK_LEAD_S ahead to absorb network jitter.
       const now = ctx.currentTime
-      if (this.nextPlayTime < now) this.nextPlayTime = now
+      if (this.nextPlayTime < now) this.nextPlayTime = now + PLAYBACK_LEAD_S
       source.start(this.nextPlayTime)
       this.nextPlayTime += buffer.duration
     } catch (err) {
