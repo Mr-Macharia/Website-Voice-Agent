@@ -43,7 +43,7 @@ const ChatInput = () => {
 
   return (
     <>
-      <div className="relative mx-auto flex w-full max-w-3xl flex-col items-center px-4 font-main">
+      <div className="relative mx-auto flex w-full max-w-3xl flex-col items-center px-3 font-main sm:px-4">
         {/* Floating Glass Input Bar */}
         <div className="relative flex w-full items-end justify-center gap-x-2 rounded-2xl border border-white/10 bg-[#0f172a]/80 p-2 shadow-2xl backdrop-blur-2xl transition-all focus-within:border-brand/60 focus-within:ring-2 focus-within:ring-brand/20">
           <div className="relative flex-1">
@@ -64,7 +64,7 @@ const ChatInput = () => {
                   handleSubmit()
                 }
               }}
-              className="max-h-36 min-h-[44px] w-full resize-none border-none bg-transparent px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:outline-hidden"
+              className="max-h-36 min-h-[44px] w-full resize-none border-none bg-transparent px-3 py-2 text-base text-white placeholder:text-zinc-500 focus:outline-hidden lg:text-sm"
               disabled={!(selectedAgent || teamId)}
               ref={chatInputRef}
             />
@@ -76,7 +76,8 @@ const ChatInput = () => {
             type="button"
             size="icon"
             title="Talk to Clyde"
-            className="size-10 shrink-0 rounded-xl border border-brand/40 bg-transparent bg-linear-to-tr from-brand/20 to-accentGold/20 p-0 text-accentGold shadow-md shadow-orange-950/40 transition-all hover:border-brand hover:bg-brand/30 hover:text-white"
+            aria-label="Start voice session"
+            className="size-11 shrink-0 rounded-xl border border-brand/40 bg-transparent bg-linear-to-tr from-brand/20 to-accentGold/20 p-0 text-accentGold shadow-md shadow-orange-950/40 transition-all hover:border-brand hover:bg-brand/30 hover:text-white lg:size-10"
           >
             <Mic className="size-4 animate-pulse" />
           </Button>
@@ -84,18 +85,19 @@ const ChatInput = () => {
           {/* Text Send Button */}
           <Button
             onClick={handleSubmit}
+            aria-label="Send message"
             disabled={
               !(selectedAgent || teamId) || !inputMessage.trim() || isStreaming
             }
             size="icon"
-            className="size-10 shrink-0 rounded-xl bg-linear-to-tr from-brand to-accentGold p-0 text-white shadow-md shadow-orange-950/40 transition-all hover:brightness-110 disabled:opacity-30 disabled:brightness-100"
+            className="size-11 shrink-0 rounded-xl bg-linear-to-tr from-brand to-accentGold p-0 text-white shadow-md shadow-orange-950/40 transition-all hover:brightness-110 disabled:opacity-30 disabled:brightness-100 lg:size-10"
           >
             <Icon type="send" color="white" />
           </Button>
         </div>
 
         {/* Input Helper Hint */}
-        <div className="mt-2 flex w-full items-center justify-between px-2 font-mono text-[10px] text-zinc-500">
+        <div className="mt-2 hidden w-full items-center justify-between px-2 font-mono text-[10px] text-zinc-500 [@media(hover:hover)]:flex">
           <div className="flex items-center gap-2">
             <span className="flex items-center gap-1">
               <kbd className="rounded-sm border border-white/10 bg-white/5 px-1 py-0.5 text-zinc-400">

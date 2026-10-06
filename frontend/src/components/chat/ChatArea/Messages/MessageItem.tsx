@@ -73,11 +73,11 @@ const AgentMessage = ({ message }: MessageProps) => {
 
   return (
     <div className="flex w-full justify-start">
-      <div className="flex max-w-[88%] items-start gap-3.5 rounded-3xl rounded-tl-sm border border-white/10 bg-[#0f172a]/80 p-5 text-zinc-100 shadow-xl backdrop-blur-2xl transition-all hover:border-white/20">
+      <div className="flex max-w-[88%] items-start gap-3.5 rounded-3xl rounded-tl-sm border border-white/10 bg-[#0f172a]/80 p-3.5 text-zinc-100 shadow-xl backdrop-blur-2xl transition-all hover:border-white/20 sm:p-5">
         <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-xl bg-linear-to-tr from-brand to-accentGold text-white shadow-md shadow-orange-950/50">
           <Sparkles className="size-4" />
         </div>
-        <div className="min-w-0 flex-1">{messageContent}</div>
+        <div className="min-w-0 flex-1 wrap-break-word">{messageContent}</div>
       </div>
     </div>
   )
@@ -86,8 +86,8 @@ const AgentMessage = ({ message }: MessageProps) => {
 const UserMessage = memo(({ message }: MessageProps) => {
   return (
     <div className="flex w-full justify-end">
-      <div className="flex max-w-[82%] items-start gap-3 rounded-3xl rounded-tr-sm border border-brand/40 bg-linear-to-tr from-brand/20 via-accentGold/15 to-[#dc2f02]/20 p-4 text-white shadow-lg shadow-orange-950/20 backdrop-blur-2xl transition-all hover:border-brand/60">
-        <div className="flex-1 font-main text-sm leading-relaxed text-zinc-100">
+      <div className="flex max-w-[82%] items-start gap-3 rounded-3xl rounded-tr-sm border border-brand/40 bg-linear-to-tr from-brand/20 via-accentGold/15 to-[#dc2f02]/20 p-3 text-white shadow-lg shadow-orange-950/20 backdrop-blur-2xl transition-all hover:border-brand/60 sm:p-4">
+        <div className="min-w-0 flex-1 font-main text-sm leading-relaxed wrap-break-word text-zinc-100">
           {message.content}
         </div>
         <div className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/10 text-zinc-200 shadow-xs">

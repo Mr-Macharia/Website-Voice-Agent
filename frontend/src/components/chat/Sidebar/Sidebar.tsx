@@ -10,6 +10,7 @@ import Sessions from './Sessions'
 import { useQueryState } from 'nuqs'
 import { Mic, Sparkles } from 'lucide-react'
 import VoiceModal from '@/components/voice/VoiceModal'
+import MobileSidebar from './MobileSidebar'
 
 const SidebarHeader = () => (
   <div className="flex items-center gap-2.5 px-1 py-1">
@@ -63,39 +64,72 @@ const LiveVoiceButton = ({ onClick }: { onClick: () => void }) => (
   </Button>
 )
 
+/**
+ * The sidebar's contents, shared by the desktop aside and the mobile drawer.
+ * `onAction` lets the drawer close itself after New Chat or Live Voice.
+ */
+export const SidebarContent = ({
+  onOpenVoice,
+  onAction
+}: {
+  onOpenVoice: () => void
+  onAction?: () => void
+}) => {
+  const { clearChat, focusChatInput } = useChatActions()
+  const { messages, isEndpointActive } = useStore()
+  const [isMounted, setIsMounted] = useState(false)
+
+  useEffect(() => setIsMounted(true), [])
+
+  const handleNewChat = () => {
+    clearChat()
+    onAction?.()
+    focusChatInput()
+  }
+
+  const handleVoice = () => {
+    onAction?.()
+    onOpenVoice()
+  }
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
+      <SidebarHeader />
+      <div className="space-y-2">
+        <NewChatButton
+          disabled={messages.length === 0}
+          onClick={handleNewChat}
+        />
+        <LiveVoiceButton onClick={handleVoice} />
+      </div>
+
+      {isMounted && isEndpointActive && <Sessions />}
+    </div>
+  )
+}
+
 const Sidebar = () => {
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false)
-  const { clearChat, focusChatInput, initialize } = useChatActions()
-  const {
-    messages,
-    selectedEndpoint,
-    isEndpointActive,
-    hydrated,
-    agents,
-    mode
-  } = useStore()
-  const [isMounted, setIsMounted] = useState(false)
+  const { initialize } = useChatActions()
+  const { selectedEndpoint, hydrated, agents, mode } = useStore()
   const [agentId] = useQueryState('agent')
 
   const activeAgentName =
     agents.find((a) => a.id === agentId)?.name || DEFAULT_AGENT_NAME
 
   useEffect(() => {
-    setIsMounted(true)
-
     if (hydrated) initialize()
   }, [selectedEndpoint, initialize, hydrated, mode])
 
-  const handleNewChat = () => {
-    clearChat()
-    focusChatInput()
-  }
+  const setMobileSidebarOpen = useStore((state) => state.setMobileSidebarOpen)
+  const openVoice = () => setIsVoiceModalOpen(true)
 
   return (
     <>
+      {/* Desktop: collapsible aside. Below lg the drawer takes over. */}
       <motion.aside
-        className="relative z-20 flex h-screen shrink-0 grow-0 flex-col overflow-hidden border-r border-white/5 bg-[#0f172a]/60 px-4 py-3.5 font-main backdrop-blur-2xl"
+        className="relative z-20 hidden h-dvh shrink-0 grow-0 flex-col overflow-hidden border-r border-white/5 bg-[#0f172a]/60 px-4 py-3.5 font-main backdrop-blur-2xl lg:flex"
         initial={{ width: '27.5rem' }}
         animate={{ width: isCollapsed ? '3.5rem' : '27.5rem' }}
         transition={{ type: 'spring', stiffness: 300, damping: 30 }}
@@ -114,7 +148,7 @@ const Sidebar = () => {
           />
         </motion.button>
         <motion.div
-          className="w-100 space-y-4"
+          className="flex min-h-0 w-100 flex-1 flex-col"
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: isCollapsed ? 0 : 1, x: isCollapsed ? -20 : 0 }}
           transition={{ duration: 0.3, ease: 'easeInOut' }}
@@ -122,18 +156,16 @@ const Sidebar = () => {
             pointerEvents: isCollapsed ? 'none' : 'auto'
           }}
         >
-          <SidebarHeader />
-          <div className="space-y-2">
-            <NewChatButton
-              disabled={messages.length === 0}
-              onClick={handleNewChat}
-            />
-            <LiveVoiceButton onClick={() => setIsVoiceModalOpen(true)} />
-          </div>
-
-          {isMounted && isEndpointActive && <Sessions />}
+          <SidebarContent onOpenVoice={openVoice} />
         </motion.div>
       </motion.aside>
+
+      <MobileSidebar>
+        <SidebarContent
+          onOpenVoice={openVoice}
+          onAction={() => setMobileSidebarOpen(false)}
+        />
+      </MobileSidebar>
 
       {/* Voice Assistant Modal */}
       <VoiceModal

@@ -8,12 +8,12 @@ export default function Home() {
   return (
     <Suspense
       fallback={
-        <div className="flex h-screen items-center justify-center font-mono text-sm text-zinc-400">
+        <div className="flex h-dvh items-center justify-center font-mono text-sm text-zinc-400">
           Loading...
         </div>
       }
     >
-      <div className="relative flex h-screen overflow-hidden bg-background text-secondary">
+      <div className="relative flex h-dvh overflow-hidden bg-background text-secondary">
         {/* Atmospheric Background from gichogumacharia.tech */}
         <div className="bg-grid-dots pointer-events-none fixed inset-0 z-0 opacity-40" />
         <div className="orb-orange -top-40 -right-40 z-0 size-[550px]" />

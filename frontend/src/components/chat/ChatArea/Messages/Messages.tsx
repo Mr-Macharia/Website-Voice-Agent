@@ -36,7 +36,7 @@ interface ReferenceItemProps {
 }
 
 const ReferenceItem: FC<ReferenceItemProps> = ({ reference }) => (
-  <div className="relative flex h-[64px] w-[200px] cursor-default flex-col justify-between overflow-hidden rounded-xl border border-white/10 bg-[#0f172a]/70 p-3 transition-colors hover:border-brand/40 hover:bg-[#0f172a]">
+  <div className="relative flex h-[64px] w-full cursor-default flex-col justify-between overflow-hidden rounded-xl border border-white/10 bg-[#0f172a]/70 p-3 transition-colors hover:border-brand/40 hover:bg-[#0f172a] sm:w-[200px]">
     <p className="truncate font-main text-xs font-semibold text-white">
       {reference.name}
     </p>

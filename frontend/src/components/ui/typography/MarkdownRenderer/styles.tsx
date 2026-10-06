@@ -1,6 +1,6 @@
 'use client'
 
-import { FC, useState } from 'react'
+import { FC, useState, type ReactNode } from 'react'
 
 import Image from 'next/image'
 import Link from 'next/link'
@@ -119,6 +119,12 @@ const HorizontalRule = ({ className, ...props }: HorizontalRuleProps) => (
     className={cn(className, 'mx-auto w-48 border-b border-border')}
     {...filterProps(props)}
   />
+)
+
+// Fenced code keeps its line structure and scrolls inside the block, so a
+// long line never widens the page on a phone.
+const Pre = ({ children }: { children?: ReactNode }) => (
+  <pre className="my-2 max-w-full overflow-x-auto rounded-md">{children}</pre>
 )
 
 const InlineCode: FC<PreparedTextProps> = ({ children }) => {
@@ -271,6 +277,7 @@ export const components = {
   hr: HorizontalRule,
   blockquote: Blockquote,
   code: InlineCode,
+  pre: Pre,
   a: AnchorLink,
   img: Img,
   p: Paragraph,

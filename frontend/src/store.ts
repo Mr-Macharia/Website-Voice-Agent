@@ -29,6 +29,8 @@ interface Store {
       id__endpoint: string
     }[]
   ) => void
+  isMobileSidebarOpen: boolean
+  setMobileSidebarOpen: (open: boolean) => void
   isStreaming: boolean
   setIsStreaming: (isStreaming: boolean) => void
   isEndpointActive: boolean
@@ -72,6 +74,9 @@ export const useStore = create<Store>()(
         set(() => ({ streamingErrorMessage })),
       endpoints: [],
       setEndpoints: (endpoints) => set(() => ({ endpoints })),
+      isMobileSidebarOpen: false,
+      setMobileSidebarOpen: (isMobileSidebarOpen) =>
+        set(() => ({ isMobileSidebarOpen })),
       isStreaming: false,
       setIsStreaming: (isStreaming) => set(() => ({ isStreaming })),
       isEndpointActive: false,
