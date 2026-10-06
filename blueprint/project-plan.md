@@ -76,6 +76,10 @@ responses avoid markdown, use short spoken-friendly sentences and spoken date
 formats; text responses use full markdown with citations from retrieved
 knowledge.
 
+Must work well on mobile browsers (iOS Safari 16.4+, Android Chrome) at
+phone widths from 360px, for both text chat and voice, not just desktop.
+Styling is Tailwind CSS v4.
+
 ## 8. Deployment - Where and how will this ship?
 
 > TODO (confirm): no deployment target or CI/CD pipeline found in the repo.

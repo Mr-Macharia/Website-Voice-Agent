@@ -1,6 +1,6 @@
 # Voice Agent - Project Overview
 
-<!-- blueprint:source-hash 0b81e894fc7789d5e02403135b0fe82027e311490b62cac5e0beddc2355f4e9e -->
+<!-- blueprint:source-hash 24bc5d404bafd58a5320d76e59c179b190ed71444d6bedad639650d9f5811335 -->
 
 > A real-time voice and text AI assistant on Gichogu Macharia's personal
 > website that answers questions about him, hands visitors to his Cal.com
@@ -53,9 +53,22 @@ No access tiers; every visitor is anonymous and gets the same assistant.
 13. **Feature-flag status endpoint** - `/api/info` reports which optional
     integrations (persistence, knowledge, booking, leads, gmail) are actually
     configured and live, so the frontend can degrade gracefully.
-
-Current direction: no new feature scope planned; priority is hardening and
-debugging the shipped product (`/fix` and `/debug`, not new `/feature` items).
+14. **Interactive tool rendering** - booking card and lead-capture form
+    rendered from tool results in text chat.
+15. **Booking card in voice mode** - booking card in the voice transcript so a
+    visitor picks a slot instead of transcribing a spoken URL.
+16. **Sidebar cleanup for public deployment** - Backend endpoint, Mode, auth
+    token and model-name controls removed; backend URL from build-time config.
+17. **Cookie-based visitor sessions** - opaque HttpOnly visitor cookie (5-day
+    expiry) groups a visitor's sessions; CORS narrowed to an exact origin
+    allowlist.
+18. **Production deployment prep** - Vercel frontend and Heroku backend config,
+    env review, `/api/leads` rate-limit hardening (`backend/core/rate_limit.py`).
+19. **Mobile-optimized UI and usage** *(next, unchecked)* - upgrade Tailwind
+    CSS v3.4 to v4.3 first, then phone-browser support: collapsible sidebar
+    drawer, touch-sized controls, safe-area and on-screen-keyboard handling,
+    full-screen voice sheet, mobile voice behaviour (tap-to-start mic/audio on
+    iOS Safari, recovery after screen lock or tab backgrounding).
 
 ## Data model
 
@@ -98,8 +111,8 @@ debugging the shipped product (`/fix` and `/debug`, not new `/feature` items).
 - **DuckDuckGo / ddgs** - web search fallback
 - **FastMCP** - MCP server wrapping the same core tools
 - **Next.js 15 + React 18 + Tailwind + Radix UI + `@livekit/components-react`** -
-  frontend chat and voice UI
-- **uv** (backend) / **pnpm** (frontend) - package management
+  frontend chat and voice UI; Tailwind moves to v4 in feature 19
+- **uv** (backend) / **pnpm** (frontend, per the plan) - package management
 
 ## Monetization
 
@@ -117,16 +130,20 @@ about Gichogu in the third person and identifies itself as his AI assistant
 when asked. Voice responses: no markdown, short spoken-friendly sentences,
 spoken date formats. Text responses: full markdown with knowledge citations.
 
+- **Mobile:** must work well on mobile browsers (iOS Safari 16.4+, Android
+  Chrome) at phone widths from 360px, for text chat and voice. Styling is
+  Tailwind CSS v4.
 - `/` - main site page hosting the chat interface and voice modal entry point
   (single-page app; no other routes identified in the frontend survey)
 
 ## Deployment
 
-> TODO: no deployment target, hosting platform, or CI/CD pipeline found in the
-> repo. `SITE_URL` defaults to `https://gichogumacharia.tech`, implying the app
-> is already live somewhere, but build/start commands per service, env vars,
-> database provisioning, and health checks are not yet documented. Run
-> `/release` to define this.
+- Frontend on Vercel (`vercel.json`), backend on Heroku (`app.json`), per
+  feature 18. `SITE_URL` defaults to `https://gichogumacharia.tech`.
+- `/api/leads` is rate limited (`backend/core/rate_limit.py`).
+
+> TODO: build/start commands per service, env vars, database provisioning, and
+> health checks are not recorded in the plans. Run `/release` to define them.
 
 ## Open questions
 

@@ -61,9 +61,9 @@ const ChatBlankState = () => {
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
-        className="mb-4 inline-flex items-center gap-2 rounded-full border border-[#e85d04]/30 bg-[#e85d04]/10 px-4 py-1.5 font-mono text-xs font-semibold uppercase tracking-wider text-[#f48c06] shadow-sm shadow-orange-950/20"
+        className="mb-4 inline-flex items-center gap-2 rounded-full border border-brand/30 bg-brand/10 px-4 py-1.5 font-mono text-xs font-semibold tracking-wider text-accentGold uppercase shadow-xs shadow-orange-950/20"
       >
-        <span className="size-2 animate-pulse rounded-full bg-[#22c55e]" />
+        <span className="size-2 animate-pulse rounded-full bg-positive" />
         <span>AI/ML Engineer • Conversational Portfolio</span>
       </motion.div>
 
@@ -74,7 +74,7 @@ const ChatBlankState = () => {
         transition={{ duration: 0.5, delay: 0.1 }}
         className="mb-6 space-y-3"
       >
-        <h1 className="font-large text-4xl font-black leading-tight tracking-tight text-white sm:text-5xl lg:text-6xl">
+        <h1 className="font-large text-4xl leading-tight font-black tracking-tight text-white sm:text-5xl lg:text-6xl">
           Gichogu <span className="accent-gradient-text">Macharia</span>
         </h1>
         <p className="mx-auto max-w-2xl text-sm leading-relaxed text-zinc-400 sm:text-base">
@@ -95,7 +95,7 @@ const ChatBlankState = () => {
             key={i}
             className={`rounded-full border px-3 py-1 font-mono text-xs transition-all ${
               b.highlight
-                ? 'border-[#e85d04]/40 bg-[#e85d04]/10 text-orange-300'
+                ? 'border-brand/40 bg-brand/10 text-orange-300'
                 : 'border-white/10 bg-white/5 text-zinc-400'
             }`}
           >
@@ -120,10 +120,10 @@ const ChatBlankState = () => {
               className="glass-panel-interactive group flex cursor-pointer flex-col justify-between rounded-2xl bg-[#0f172a]/60 p-4 text-left transition-all hover:scale-[1.02] active:scale-[0.99]"
             >
               <div>
-                <div className="mb-3 flex size-8 items-center justify-center rounded-xl bg-gradient-to-tr from-[#e85d04] to-[#f48c06] text-white shadow-md shadow-orange-950/40 transition-transform group-hover:rotate-6">
+                <div className="mb-3 flex size-8 items-center justify-center rounded-xl bg-linear-to-tr from-brand to-accentGold text-white shadow-md shadow-orange-950/40 transition-transform group-hover:rotate-6">
                   <IconComponent className="size-4" />
                 </div>
-                <h3 className="mb-1 font-large text-sm font-bold text-white transition-colors group-hover:text-[#f48c06]">
+                <h3 className="mb-1 font-large text-sm font-bold text-white transition-colors group-hover:text-accentGold">
                   {card.title}
                 </h3>
                 <p className="text-xs leading-relaxed text-zinc-400">

@@ -28,7 +28,7 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body className="min-h-screen overflow-x-hidden bg-[#0a0f1e] font-main text-[#f1f5f9] antialiased selection:bg-[#e85d04]/30 selection:text-white">
+      <body className="min-h-screen overflow-x-hidden bg-background font-main text-secondary antialiased selection:bg-brand/30 selection:text-white">
         <NuqsAdapter>{children}</NuqsAdapter>
         <Toaster
           toastOptions={{

@@ -37,12 +37,12 @@ export const VoiceAgentControlBar: React.FC<VoiceAgentControlBarProps> = ({
   const isLiveKit = transport === 'livekit'
 
   return (
-    <div className="flex w-full items-center justify-between border-t border-white/10 bg-[#0a0f1e]/95 px-6 py-3.5 backdrop-blur-2xl">
+    <div className="flex w-full items-center justify-between border-t border-white/10 bg-background/95 px-6 py-3.5 backdrop-blur-2xl">
       {/* Agent Info & Connection Status */}
       <div className="flex items-center gap-3">
-        <div className="relative flex size-10 items-center justify-center rounded-xl bg-gradient-to-tr from-[#e85d04] to-[#f48c06] text-white shadow-lg shadow-orange-950/40 ring-1 ring-white/20">
+        <div className="relative flex size-10 items-center justify-center rounded-xl bg-linear-to-tr from-brand to-accentGold text-white shadow-lg ring-1 shadow-orange-950/40 ring-white/20">
           <Sparkles className="size-4.5" />
-          <span className="absolute -bottom-0.5 -right-0.5 flex size-2.5">
+          <span className="absolute -right-0.5 -bottom-0.5 flex size-2.5">
             <span
               className={`size-full rounded-full ${
                 isConnected
@@ -66,7 +66,7 @@ export const VoiceAgentControlBar: React.FC<VoiceAgentControlBarProps> = ({
             {isLiveKit ? (
               <Radio className="size-3 text-sky-400" />
             ) : (
-              <Zap className="size-3 text-[#f48c06]" />
+              <Zap className="size-3 text-accentGold" />
             )}
             <span className="text-zinc-300">
               {isConnected ? mode : 'Connecting...'}
@@ -102,7 +102,7 @@ export const VoiceAgentControlBar: React.FC<VoiceAgentControlBarProps> = ({
           variant="destructive"
           size="icon"
           onClick={onDisconnect}
-          className="size-10 rounded-full bg-gradient-to-tr from-[#dc2f02] to-rose-600 text-white shadow-lg shadow-rose-950/60 transition-all hover:scale-105 hover:brightness-110 active:scale-95"
+          className="size-10 rounded-full bg-linear-to-tr from-[#dc2f02] to-rose-600 text-white shadow-lg shadow-rose-950/60 transition-all hover:scale-105 hover:brightness-110 active:scale-95"
           title="End Voice Session"
         >
           <PhoneOff className="size-4.5" />

@@ -63,3 +63,22 @@
        config, env review, and the F-07 rate-limit hardening that must land
        before `/api/leads` is publicly reachable (`app.json`, `vercel.json`,
        `backend/core/rate_limit.py`)
+
+- [ ] 19. **Mobile-optimized UI and usage** - upgrade Tailwind CSS v3.4 to v4.3
+       first, then make chat and voice work on phone browsers: collapsible
+       sidebar drawer, touch-sized controls, safe-area and on-screen-keyboard
+       handling, full-screen voice sheet, and mobile voice behaviour (tap-to-start
+       mic/audio on iOS Safari, recovery after screen lock or tab backgrounding)
+       (`frontend/src/components/chat/`, `frontend/src/components/voice/`,
+       `frontend/src/app/`, Tailwind config)
+  - [x] 19a. **Tailwind CSS v4.3 upgrade** - move the v3.4 JS config to CSS
+         `@theme`, switch PostCSS to `@tailwindcss/postcss`, replace
+         `tailwindcss-animate` with `tw-animate-css`, apply the class renames;
+         no intended visual change
+  - [ ] 19b. **Responsive chat layout** - sidebar becomes a drawer below `md`,
+         `h-dvh` instead of `h-screen`/`100vh`, safe-area insets, 44px tap
+         targets, chat input stays above the on-screen keyboard, tool cards and
+         message widths fit from 360px
+  - [ ] 19c. **Mobile voice** - AssemblyAI voice modal becomes a full-screen
+         sheet on phones; mic/audio start from a tap (iOS Safari), and the
+         session recovers or ends cleanly after screen lock or tab backgrounding

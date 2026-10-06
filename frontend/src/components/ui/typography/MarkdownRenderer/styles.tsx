@@ -123,7 +123,7 @@ const HorizontalRule = ({ className, ...props }: HorizontalRuleProps) => (
 
 const InlineCode: FC<PreparedTextProps> = ({ children }) => {
   return (
-    <code className="relative whitespace-pre-wrap rounded-sm bg-background-secondary/50 p-1">
+    <code className="relative rounded-xs bg-background-secondary/50 p-1 whitespace-pre-wrap">
       {children}
     </code>
   )
@@ -222,7 +222,7 @@ const TableHead = ({ className, ...props }: TableHeaderProps) => (
   <thead
     className={cn(
       className,
-      'rounded-md border-b border-border bg-transparent p-2 text-left text-sm font-[600]'
+      'rounded-md border-b border-border bg-transparent p-2 text-left text-sm font-semibold'
     )}
     {...filterProps(props)}
   />
@@ -230,7 +230,7 @@ const TableHead = ({ className, ...props }: TableHeaderProps) => (
 
 const TableHeadCell = ({ className, ...props }: TableHeaderCellProps) => (
   <th
-    className={cn(className, 'p-2 text-sm font-[600]')}
+    className={cn(className, 'p-2 text-sm font-semibold')}
     {...filterProps(props)}
   />
 )
@@ -248,7 +248,7 @@ const TableRow = ({ className, ...props }: TableRowProps) => (
 
 const TableCell = ({ className, ...props }: TableCellProps) => (
   <td
-    className={cn(className, 'whitespace-nowrap p-2 font-[400]')}
+    className={cn(className, 'p-2 font-normal whitespace-nowrap')}
     {...filterProps(props)}
   />
 )

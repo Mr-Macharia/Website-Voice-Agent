@@ -47,7 +47,7 @@ const ChatAreaHeader = () => {
       <header className="z-10 flex items-center justify-between border-b border-white/5 bg-[#0f172a]/50 px-6 py-3 backdrop-blur-xl">
         {/* Left: Active Agent & Model Indicator */}
         <div className="flex items-center gap-3">
-          <div className="flex size-8 items-center justify-center rounded-xl bg-gradient-to-tr from-[#e85d04] to-[#f48c06] text-white shadow-md shadow-orange-950/40">
+          <div className="flex size-8 items-center justify-center rounded-xl bg-linear-to-tr from-brand to-accentGold text-white shadow-md shadow-orange-950/40">
             <Sparkles className="size-4" />
           </div>
           <div>
@@ -55,8 +55,8 @@ const ChatAreaHeader = () => {
               <span className="font-large text-sm font-bold text-white">
                 {agentName}
               </span>
-              <span className="flex items-center gap-1 rounded-full border border-[#22c55e]/30 bg-[#22c55e]/10 px-2 py-0.5 font-mono text-[10px] text-[#22c55e]">
-                <span className="size-1.5 animate-pulse rounded-full bg-[#22c55e]" />
+              <span className="flex items-center gap-1 rounded-full border border-positive/30 bg-positive/10 px-2 py-0.5 font-mono text-[10px] text-positive">
+                <span className="size-1.5 animate-pulse rounded-full bg-positive" />
                 Live
               </span>
             </div>
@@ -82,7 +82,7 @@ const ChatAreaHeader = () => {
                 title="Copy full chat transcript"
               >
                 {copied ? (
-                  <Check className="size-3 text-[#22c55e]" />
+                  <Check className="size-3 text-positive" />
                 ) : (
                   <Copy className="size-3" />
                 )}
@@ -108,7 +108,7 @@ const ChatAreaHeader = () => {
           <Button
             size="sm"
             onClick={() => setIsVoiceOpen(true)}
-            className="h-8 gap-1.5 rounded-xl border border-[#e85d04]/50 bg-gradient-to-r from-[#e85d04] to-[#f48c06] px-3.5 font-mono text-xs font-semibold text-white shadow-md shadow-orange-950/40 transition-all hover:brightness-110 active:scale-95"
+            className="h-8 gap-1.5 rounded-xl border border-brand/50 bg-linear-to-r from-brand to-accentGold px-3.5 font-mono text-xs font-semibold text-white shadow-md shadow-orange-950/40 transition-all hover:brightness-110 active:scale-95"
           >
             <Mic className="size-3.5 animate-pulse" />
             <span>Voice Mode</span>
@@ -128,12 +128,12 @@ const ChatAreaHeader = () => {
 
 const ChatArea = () => {
   return (
-    <main className="relative flex h-screen flex-grow flex-col overflow-hidden bg-[#0a0f1e]/40 font-main">
+    <main className="relative flex h-screen grow flex-col overflow-hidden bg-background/40 font-main">
       <ChatAreaHeader />
       <div className="flex flex-1 flex-col overflow-hidden">
         <MessageArea />
       </div>
-      <div className="pb-3 pt-1">
+      <div className="pt-1 pb-3">
         <ChatInput />
       </div>
     </main>

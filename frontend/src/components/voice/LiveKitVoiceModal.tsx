@@ -191,11 +191,11 @@ const LiveKitVoiceSession: React.FC<{
   }
 
   return (
-    <div className="flex h-[680px] max-h-[88vh] w-full flex-col justify-between bg-[#0a0f1e]">
+    <div className="flex h-[680px] max-h-[88vh] w-full flex-col justify-between bg-background">
       <RoomAudioRenderer />
 
       {/* Top Status Header */}
-      <div className="flex items-center justify-between border-b border-white/10 bg-[#0a0f1e]/95 px-7 py-4 backdrop-blur-2xl">
+      <div className="flex items-center justify-between border-b border-white/10 bg-background/95 px-7 py-4 backdrop-blur-2xl">
         <div className="flex items-center gap-3">
           <span className="relative flex size-2.5">
             <span className="size-full animate-ping rounded-full bg-sky-400 opacity-75" />
@@ -215,7 +215,7 @@ const LiveKitVoiceSession: React.FC<{
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 font-mono text-[11px] text-zinc-300">
             <span className="text-zinc-500">State:</span>
-            <span className="font-semibold uppercase text-sky-400">
+            <span className="font-semibold text-sky-400 uppercase">
               {agentState}
             </span>
           </div>
@@ -233,7 +233,7 @@ const LiveKitVoiceSession: React.FC<{
       {/* Visualizer Centerpiece */}
       <div className="relative flex flex-1 flex-col items-center justify-between overflow-hidden px-8 py-6">
         {/* Ambient Glow */}
-        <div className="orb-fire pointer-events-none -right-24 -top-24 size-80 opacity-15" />
+        <div className="orb-fire pointer-events-none -top-24 -right-24 size-80 opacity-15" />
 
         {/* 1. Visualizer Stage */}
         <div className="flex shrink-0 flex-col items-center justify-center pt-2">
@@ -270,7 +270,7 @@ const LiveKitVoiceSession: React.FC<{
                         : 'border border-white/10 bg-[#0f172a]/80 text-zinc-100'
                     } ${turn.final ? '' : 'opacity-70'}`}
                   >
-                    <span className="mb-0.5 block font-mono text-[10px] uppercase tracking-wide text-zinc-400">
+                    <span className="mb-0.5 block font-mono text-[10px] tracking-wide text-zinc-400 uppercase">
                       {turn.role === 'user' ? 'You' : agentName}
                     </span>
                     {turn.text}
@@ -1314,21 +1314,21 @@ const DirectVoiceSession: React.FC<{
   return (
     <div
       onClick={unlockAudio}
-      className="flex h-[680px] max-h-[88vh] w-full flex-col justify-between bg-[#0a0f1e]"
+      className="flex h-[680px] max-h-[88vh] w-full flex-col justify-between bg-background"
     >
       {/* Top Status Header */}
-      <div className="flex items-center justify-between border-b border-white/10 bg-[#0a0f1e]/95 px-7 py-4 backdrop-blur-2xl">
+      <div className="flex items-center justify-between border-b border-white/10 bg-background/95 px-7 py-4 backdrop-blur-2xl">
         <div className="flex items-center gap-3">
           <span className="relative flex size-2.5">
-            <span className="size-full animate-ping rounded-full bg-[#f48c06] opacity-75" />
-            <span className="absolute inset-0 size-2.5 rounded-full bg-[#f48c06] shadow-[0_0_8px_#f48c06]" />
+            <span className="size-full animate-ping rounded-full bg-accentGold opacity-75" />
+            <span className="absolute inset-0 size-2.5 rounded-full bg-accentGold shadow-[0_0_8px_#f48c06]" />
           </span>
           <div className="flex items-center gap-2">
-            <Zap className="size-4 text-[#f48c06]" />
+            <Zap className="size-4 text-accentGold" />
             <span className="font-mono text-xs font-medium text-zinc-200">
               {VOICE_MODE_LABEL}
             </span>
-            <span className="rounded-full border border-[#f48c06]/20 bg-[#f48c06]/10 px-2.5 py-0.5 font-mono text-[10px] text-[#faa307]">
+            <span className="rounded-full border border-accentGold/20 bg-accentGold/10 px-2.5 py-0.5 font-mono text-[10px] text-[#faa307]">
               Speech to speech
             </span>
           </div>
@@ -1339,7 +1339,7 @@ const DirectVoiceSession: React.FC<{
             onClick={() => setShowHistory(!showHistory)}
             className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 font-mono text-[11px] transition-all ${
               showHistory
-                ? 'border-[#e85d04]/50 bg-[#e85d04]/20 text-[#f48c06]'
+                ? 'border-brand/50 bg-brand/20 text-accentGold'
                 : 'border-white/10 bg-white/5 text-zinc-400 hover:border-white/20 hover:text-zinc-200'
             }`}
             title="Toggle full conversation transcript"
@@ -1366,7 +1366,7 @@ const DirectVoiceSession: React.FC<{
 
           <div className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 font-mono text-[11px] text-zinc-300">
             <span className="text-zinc-500">State:</span>
-            <span className="font-semibold uppercase text-[#f48c06]">
+            <span className="font-semibold text-accentGold uppercase">
               {voiceState}
             </span>
           </div>
@@ -1383,19 +1383,19 @@ const DirectVoiceSession: React.FC<{
 
       {showHistory ? (
         /* Full Transcript View */
-        <div className="flex flex-1 flex-col overflow-hidden bg-[#0a0f1e]/90 p-7">
+        <div className="flex flex-1 flex-col overflow-hidden bg-background/90 p-7">
           <div className="mb-4 flex items-center justify-between">
-            <h4 className="font-mono text-xs uppercase tracking-wider text-zinc-400">
+            <h4 className="font-mono text-xs tracking-wider text-zinc-400 uppercase">
               Saved Conversation Turns ({(history.length / 2) | 0})
             </h4>
             <Button
               variant="outline"
               size="sm"
               onClick={copyTranscriptText}
-              className="h-8 gap-1.5 rounded-xl border-white/10 bg-white/5 px-3 text-xs text-zinc-300 transition-all hover:border-[#e85d04]/40 hover:bg-[#e85d04]/20 hover:text-white"
+              className="h-8 gap-1.5 rounded-xl border-white/10 bg-white/5 px-3 text-xs text-zinc-300 transition-all hover:border-brand/40 hover:bg-brand/20 hover:text-white"
             >
               {copied ? (
-                <Check className="size-3.5 text-[#22c55e]" />
+                <Check className="size-3.5 text-positive" />
               ) : (
                 <Copy className="size-3.5" />
               )}
@@ -1404,7 +1404,7 @@ const DirectVoiceSession: React.FC<{
           </div>
           <div className="flex-1 space-y-3.5 overflow-y-auto rounded-2xl border border-white/5 bg-[#0f172a]/60 p-5 pr-3">
             {history.length === 0 ? (
-              <div className="py-16 text-center font-mono text-xs italic text-zinc-500">
+              <div className="py-16 text-center font-mono text-xs text-zinc-500 italic">
                 No spoken turns yet. Speak or type to start recording the
                 conversation.
               </div>
@@ -1415,10 +1415,10 @@ const DirectVoiceSession: React.FC<{
                   className={`rounded-2xl p-3.5 text-xs ${
                     turn.role === 'user'
                       ? 'ml-8 border border-sky-500/20 bg-sky-950/20 text-zinc-200'
-                      : 'mr-8 border border-[#e85d04]/30 bg-[#e85d04]/10 text-zinc-100'
+                      : 'mr-8 border border-brand/30 bg-brand/10 text-zinc-100'
                   }`}
                 >
-                  <div className="mb-1.5 font-mono text-[10px] uppercase text-zinc-400">
+                  <div className="mb-1.5 font-mono text-[10px] text-zinc-400 uppercase">
                     {turn.role === 'user' ? 'You' : agentName}
                   </div>
                   <div className="font-main text-sm leading-relaxed">
@@ -1431,9 +1431,9 @@ const DirectVoiceSession: React.FC<{
         </div>
       ) : (
         /* Visualizer Centerpiece */
-        <div className="relative flex flex-1 flex-col items-center justify-between overflow-hidden bg-[#0a0f1e]/90 px-8 py-6">
+        <div className="relative flex flex-1 flex-col items-center justify-between overflow-hidden bg-background/90 px-8 py-6">
           {/* Subtle background glow */}
-          <div className="orb-orange pointer-events-none -right-24 -top-24 size-80 opacity-20" />
+          <div className="orb-orange pointer-events-none -top-24 -right-24 size-80 opacity-20" />
 
           {/* 1. Visualizer Stage */}
           <div className="flex shrink-0 flex-col items-center justify-center pt-1">
@@ -1453,14 +1453,14 @@ const DirectVoiceSession: React.FC<{
                   key="agent-text"
                   initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="max-h-36 w-full overflow-y-auto rounded-2xl border border-[#e85d04]/30 bg-[#0f172a]/95 p-4 text-xs text-zinc-100 shadow-2xl shadow-orange-950/30 backdrop-blur-xl"
+                  className="max-h-36 w-full overflow-y-auto rounded-2xl border border-brand/30 bg-[#0f172a]/95 p-4 text-xs text-zinc-100 shadow-2xl shadow-orange-950/30 backdrop-blur-xl"
                 >
-                  <div className="mb-2 flex items-center justify-between font-mono text-[10px] uppercase text-[#f48c06]">
+                  <div className="mb-2 flex items-center justify-between font-mono text-[10px] text-accentGold uppercase">
                     <span className="flex items-center gap-1.5">
                       <Sparkles className="size-3" />
                       {agentName}
                     </span>
-                    <span className="rounded-full bg-[#e85d04]/10 px-2 py-0.5 text-[9px] font-semibold text-[#faa307]">
+                    <span className="rounded-full bg-brand/10 px-2 py-0.5 text-[9px] font-semibold text-[#faa307]">
                       Speaking
                     </span>
                   </div>
@@ -1475,7 +1475,7 @@ const DirectVoiceSession: React.FC<{
                   animate={{ opacity: 1, y: 0 }}
                   className="max-h-36 w-full overflow-y-auto rounded-2xl border border-sky-500/30 bg-[#0f172a]/95 p-4 text-xs text-zinc-100 shadow-2xl shadow-sky-950/30 backdrop-blur-xl"
                 >
-                  <div className="mb-2 flex items-center justify-between font-mono text-[10px] uppercase text-sky-400">
+                  <div className="mb-2 flex items-center justify-between font-mono text-[10px] text-sky-400 uppercase">
                     <span className="flex items-center gap-1.5">
                       <Mic className="size-3" />
                       You
@@ -1515,7 +1515,7 @@ const DirectVoiceSession: React.FC<{
               <span className="text-[10px] text-zinc-400">Mic Level</span>
               <div className="h-1.5 w-32 overflow-hidden rounded-full bg-white/10">
                 <div
-                  className="h-full bg-gradient-to-r from-emerald-400 via-amber-400 to-[#e85d04] transition-all duration-75"
+                  className="h-full bg-linear-to-r from-emerald-400 via-amber-400 to-brand transition-all duration-75"
                   style={{
                     width: `${Math.min(100, Math.max(4, micVolume * 100))}%`
                   }}
@@ -1544,10 +1544,10 @@ const DirectVoiceSession: React.FC<{
                     if (isRecordingAudioRef.current) handleManualPushToTalkEnd()
                   }}
                   onContextMenu={(e) => e.preventDefault()}
-                  className={`relative flex touch-none select-none items-center gap-2 rounded-full px-9 py-3 font-mono text-xs font-semibold text-white shadow-xl transition-all ${
+                  className={`relative flex touch-none items-center gap-2 rounded-full px-9 py-3 font-mono text-xs font-semibold text-white shadow-xl transition-all select-none ${
                     isManualRecording
-                      ? 'scale-95 bg-rose-600 shadow-rose-950/60 ring-4 ring-rose-500/40'
-                      : 'bg-gradient-to-tr from-[#e85d04] to-[#f48c06] shadow-orange-950/50 hover:brightness-110 active:scale-95'
+                      ? 'scale-95 bg-rose-600 ring-4 shadow-rose-950/60 ring-rose-500/40'
+                      : 'bg-linear-to-tr from-brand to-accentGold shadow-orange-950/50 hover:brightness-110 active:scale-95'
                   }`}
                 >
                   <Mic className="size-4" />
@@ -1566,13 +1566,13 @@ const DirectVoiceSession: React.FC<{
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') handleSendPrompt(quickInput)
                   }}
-                  className="h-11 w-full rounded-2xl border border-white/10 bg-[#0f172a]/90 px-4 text-xs text-white backdrop-blur-xl placeholder:text-zinc-500 focus:border-[#e85d04]/60 focus:outline-none"
+                  className="h-11 w-full rounded-2xl border border-white/10 bg-[#0f172a]/90 px-4 text-xs text-white backdrop-blur-xl placeholder:text-zinc-500 focus:border-brand/60 focus:outline-hidden"
                 />
                 <Button
                   size="icon"
                   onClick={() => handleSendPrompt(quickInput)}
                   disabled={!quickInput.trim()}
-                  className="size-11 shrink-0 rounded-2xl bg-gradient-to-tr from-[#e85d04] to-[#f48c06] text-white shadow-md shadow-orange-950/50 hover:brightness-110 disabled:opacity-40"
+                  className="size-11 shrink-0 rounded-2xl bg-linear-to-tr from-brand to-accentGold text-white shadow-md shadow-orange-950/50 hover:brightness-110 disabled:opacity-40"
                 >
                   <Send className="size-4" />
                 </Button>
@@ -1686,7 +1686,7 @@ export const LiveKitVoiceModal: React.FC<LiveKitVoiceModalProps> = ({
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent
         hideCloseButton={true}
-        className="max-h-[92vh] max-w-3xl overflow-hidden rounded-3xl border border-white/10 bg-[#0a0f1e] p-0 text-white shadow-2xl ring-1 ring-white/10 backdrop-blur-2xl sm:max-w-[780px] lg:max-w-[820px]"
+        className="max-h-[92vh] max-w-3xl overflow-hidden rounded-3xl border border-white/10 bg-background p-0 text-white shadow-2xl ring-1 ring-white/10 backdrop-blur-2xl sm:max-w-[780px] lg:max-w-[820px]"
       >
         <DialogHeader className="sr-only">
           <DialogTitle>Clyde — portfolio voice agent</DialogTitle>
@@ -1696,8 +1696,8 @@ export const LiveKitVoiceModal: React.FC<LiveKitVoiceModalProps> = ({
         </DialogHeader>
 
         {isLoading ? (
-          <div className="flex h-[520px] flex-col items-center justify-center gap-4 bg-[#0a0f1e]">
-            <RefreshCw className="size-8 animate-spin text-[#f48c06]" />
+          <div className="flex h-[520px] flex-col items-center justify-center gap-4 bg-background">
+            <RefreshCw className="size-8 animate-spin text-accentGold" />
             <div className="font-mono text-sm font-medium text-zinc-300">
               Initializing Voice Session...
             </div>

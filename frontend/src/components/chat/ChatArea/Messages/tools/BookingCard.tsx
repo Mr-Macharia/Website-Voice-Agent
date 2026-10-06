@@ -255,9 +255,9 @@ export const BookingCard: React.FC<BookingCardProps> = ({
   }, [calLink, status, isOwner])
 
   return (
-    <div className="rounded-2xl border border-[#e85d04]/25 bg-[#e85d04]/[0.07] p-3.5 backdrop-blur-md">
+    <div className="rounded-2xl border border-brand/25 bg-brand/[0.07] p-3.5 backdrop-blur-md">
       <div className="flex items-start gap-3">
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-[#e85d04] to-[#f48c06] text-white shadow-md shadow-orange-950/40">
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-linear-to-tr from-brand to-accentGold text-white shadow-md shadow-orange-950/40">
           <CalendarDays className="size-4" />
         </div>
 
@@ -301,7 +301,7 @@ export const BookingCard: React.FC<BookingCardProps> = ({
           */}
           <div
             ref={containerRef}
-            className="min-h-[560px] w-full rounded-xl border border-white/10 bg-[#0a0f1e] [&_iframe]:!w-full"
+            className="min-h-[560px] w-full rounded-xl border border-white/10 bg-background [&_iframe]:w-full!"
           />
           {status === 'loading' ? (
             <p className="mt-2 text-center text-xs text-zinc-500">
@@ -328,7 +328,7 @@ export const BookingCard: React.FC<BookingCardProps> = ({
           href={payload.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-white/10 px-3 py-1.5 font-mono text-xs text-zinc-300 transition-all hover:border-[#e85d04]/60 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f48c06] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0f1e]"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-white/10 px-3 py-1.5 font-mono text-xs text-zinc-300 transition-all hover:border-brand/60 hover:text-white focus-visible:ring-2 focus-visible:ring-accentGold focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-hidden"
         >
           <span>Open on cal.com</span>
           <ArrowUpRight className="size-3.5" aria-hidden="true" />

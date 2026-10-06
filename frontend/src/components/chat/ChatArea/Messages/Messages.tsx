@@ -36,7 +36,7 @@ interface ReferenceItemProps {
 }
 
 const ReferenceItem: FC<ReferenceItemProps> = ({ reference }) => (
-  <div className="relative flex h-[64px] w-[200px] cursor-default flex-col justify-between overflow-hidden rounded-xl border border-white/10 bg-[#0f172a]/70 p-3 transition-colors hover:border-[#e85d04]/40 hover:bg-[#0f172a]">
+  <div className="relative flex h-[64px] w-[200px] cursor-default flex-col justify-between overflow-hidden rounded-xl border border-white/10 bg-[#0f172a]/70 p-3 transition-colors hover:border-brand/40 hover:bg-[#0f172a]">
     <p className="truncate font-main text-xs font-semibold text-white">
       {reference.name}
     </p>
@@ -77,7 +77,7 @@ const AgentMessageWrapper = ({ message }: MessageWrapperProps) => {
                 <BrainCircuit className="size-3.5" />
               </div>
               <div className="flex flex-col gap-2">
-                <p className="font-mono text-[11px] font-semibold uppercase tracking-wider text-purple-300">
+                <p className="font-mono text-[11px] font-semibold tracking-wider text-purple-300 uppercase">
                   Reasoning Steps
                 </p>
                 <Reasonings reasoning={message.extra_data.reasoning_steps} />
@@ -94,7 +94,7 @@ const AgentMessageWrapper = ({ message }: MessageWrapperProps) => {
                 <BookOpen className="size-3.5" />
               </div>
               <div className="flex flex-col gap-2">
-                <p className="font-mono text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+                <p className="font-mono text-[11px] font-semibold tracking-wider text-zinc-400 uppercase">
                   References
                 </p>
                 <References references={message.extra_data.references} />
@@ -105,12 +105,12 @@ const AgentMessageWrapper = ({ message }: MessageWrapperProps) => {
 
       {message.tool_calls && message.tool_calls.length > 0 && (
         <div className="flex w-full justify-start">
-          <div className="flex max-w-[88%] items-start gap-3 rounded-2xl border border-[#e85d04]/20 bg-[#e85d04]/10 p-3.5 backdrop-blur-md">
-            <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-lg bg-[#e85d04]/20 text-[#f48c06]">
+          <div className="flex max-w-[88%] items-start gap-3 rounded-2xl border border-brand/20 bg-brand/10 p-3.5 backdrop-blur-md">
+            <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-lg bg-brand/20 text-accentGold">
               <Wrench className="size-3.5" />
             </div>
             <div className="flex flex-col gap-2">
-              <p className="font-mono text-[11px] font-semibold uppercase tracking-wider text-orange-300">
+              <p className="font-mono text-[11px] font-semibold tracking-wider text-orange-300 uppercase">
                 Tool Execution
               </p>
               <div className="flex flex-wrap gap-2">
@@ -234,8 +234,8 @@ const toolLabel = (name?: string) => {
 }
 
 const ToolComponent = memo(({ tools }: ToolCallProps) => (
-  <div className="inline-flex items-center gap-1.5 rounded-xl border border-[#e85d04]/30 bg-[#0f172a]/90 px-3 py-1 font-mono text-xs text-orange-200 shadow-sm">
-    <span className="size-1.5 animate-pulse rounded-full bg-[#f48c06]" />
+  <div className="inline-flex items-center gap-1.5 rounded-xl border border-brand/30 bg-[#0f172a]/90 px-3 py-1 font-mono text-xs text-orange-200 shadow-xs">
+    <span className="size-1.5 animate-pulse rounded-full bg-accentGold" />
     <span>{toolLabel(tools.tool_name)}</span>
   </div>
 ))
