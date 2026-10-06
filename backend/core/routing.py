@@ -69,21 +69,25 @@ def _questions() -> dict:
         "needs_owner_knowledge": Noul(
             instructions={
                 "question": (
-                    f"Does `message` ask for a fact about {owner} that has to "
-                    f"be looked up: his background, projects, skills, "
-                    f"experience, availability or how to reach him?"
+                    f"Does `message` ask for a fact about {owner}'s background, "
+                    f"projects, skills or work experience that has to be looked up?"
                 ),
-                "focus": "Judge whether lookup is needed, not whether the topic is interesting.",
+                "focus": (
+                    "Judge whether lookup is needed, not whether the topic is "
+                    "interesting. Booking a call, leaving contact details or "
+                    "asking how to reach him are not lookups."
+                ),
             },
             criteria=NoulCriteria(
                 true={
-                    "what": f"Asks about {owner}, his work or his availability",
+                    "what": f"Asks about {owner}'s background, projects, skills or experience",
+                    "not_for": "Booking a call, leaving details, or how to reach him",
                     "examples": ["What has he built?", "Where has he worked?"],
                 },
                 false={
                     "what": "Greetings, thanks, or questions not about him",
-                    "not_for": f"Any question about {owner}",
-                    "examples": ["Hi!", "Thanks, that helps"],
+                    "not_for": f"Any question about {owner}'s background or work",
+                    "examples": ["Hi!", "Thanks, that helps", "Can I book a call?"],
                 },
             ),
         ),
