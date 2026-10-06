@@ -21,6 +21,16 @@ from core import config
 
 logger = logging.getLogger("core.routing")
 
+# Nothing configures the root logger for the AgentOS server, so INFO records
+# would be dropped and the shadow lines would never appear in the terminal.
+# This logger therefore carries its own handler.
+if not logger.handlers:
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(logging.Formatter("[jev] %(message)s"))
+    logger.addHandler(_handler)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+
 INTENTS = ("about_owner", "book_meeting", "leave_details", "current_info", "small_talk")
 
 
