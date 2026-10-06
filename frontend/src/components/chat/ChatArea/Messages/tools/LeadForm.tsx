@@ -139,7 +139,7 @@ export const LeadForm: React.FC<LeadFormProps> = ({
       ref={formRef}
       onSubmit={handleSubmit}
       noValidate
-      className="rounded-2xl border border-white/10 bg-white/[0.04] p-3.5 backdrop-blur-md"
+      className="rounded-2xl border border-white/10 bg-white/4 p-3.5 backdrop-blur-md"
     >
       <p className="font-large text-sm font-semibold text-white">
         Leave your details
@@ -157,11 +157,11 @@ export const LeadForm: React.FC<LeadFormProps> = ({
             <div key={field.key} className="flex flex-col gap-1">
               <LabelPrimitive.Root
                 htmlFor={id}
-                className="font-mono text-[11px] uppercase tracking-wider text-zinc-400"
+                className="font-mono text-[11px] tracking-wider text-zinc-400 uppercase"
               >
                 {field.label}
                 {'optional' in field && field.optional ? (
-                  <span className="ml-1 normal-case text-zinc-500">
+                  <span className="ml-1 text-zinc-500 normal-case">
                     (optional)
                   </span>
                 ) : null}
@@ -176,7 +176,7 @@ export const LeadForm: React.FC<LeadFormProps> = ({
                 onChange={(e) => set(field.key)(e.target.value)}
                 aria-invalid={error ? true : undefined}
                 aria-describedby={error ? errorId : undefined}
-                className="rounded-xl border border-white/10 bg-[#0f172a]/80 px-3 py-2 text-sm text-zinc-100 outline-none transition-colors placeholder:text-zinc-600 focus:border-[#e85d04]/60 disabled:opacity-50 aria-[invalid=true]:border-rose-500/60"
+                className="rounded-xl border border-white/10 bg-[#0f172a]/80 px-3 py-2 text-sm text-zinc-100 outline-hidden transition-colors placeholder:text-zinc-600 focus:border-brand/60 disabled:opacity-50 aria-invalid:border-rose-500/60"
               />
               {error ? (
                 <p id={errorId} className="text-xs text-rose-300">
@@ -190,10 +190,10 @@ export const LeadForm: React.FC<LeadFormProps> = ({
         <div className="flex flex-col gap-1">
           <LabelPrimitive.Root
             htmlFor={`${baseId}-message`}
-            className="font-mono text-[11px] uppercase tracking-wider text-zinc-400"
+            className="font-mono text-[11px] tracking-wider text-zinc-400 uppercase"
           >
             Message
-            <span className="ml-1 normal-case text-zinc-500">(optional)</span>
+            <span className="ml-1 text-zinc-500 normal-case">(optional)</span>
           </LabelPrimitive.Root>
           <textarea
             id={`${baseId}-message`}
@@ -206,7 +206,7 @@ export const LeadForm: React.FC<LeadFormProps> = ({
             aria-describedby={
               errors.message ? `${baseId}-message-error` : undefined
             }
-            className="resize-none rounded-xl border border-white/10 bg-[#0f172a]/80 px-3 py-2 text-sm text-zinc-100 outline-none transition-colors placeholder:text-zinc-600 focus:border-[#e85d04]/60 disabled:opacity-50 aria-[invalid=true]:border-rose-500/60"
+            className="resize-none rounded-xl border border-white/10 bg-[#0f172a]/80 px-3 py-2 text-sm text-zinc-100 outline-hidden transition-colors placeholder:text-zinc-600 focus:border-brand/60 disabled:opacity-50 aria-invalid:border-rose-500/60"
           />
           {errors.message ? (
             <p id={`${baseId}-message-error`} className="text-xs text-rose-300">
@@ -226,7 +226,7 @@ export const LeadForm: React.FC<LeadFormProps> = ({
       <Button
         type="submit"
         disabled={disabled}
-        className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-[#e85d04]/40 bg-[#e85d04]/15 px-3 py-1.5 text-xs text-orange-200 transition-all hover:border-[#e85d04] hover:bg-[#e85d04]/25 hover:text-white disabled:opacity-60"
+        className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-brand/40 bg-brand/15 px-3 py-1.5 text-xs text-orange-200 transition-all hover:border-brand hover:bg-brand/25 hover:text-white disabled:opacity-60"
       >
         {disabled ? (
           <Loader2 className="size-3.5 animate-spin" />

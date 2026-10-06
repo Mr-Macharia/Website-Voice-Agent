@@ -1,27 +1,86 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
 
-:root {
-  --bg-primary: #0a0f1e;
-  --bg-secondary: #0f172a;
-  --bg-tertiary: #1e293b;
-  --accent-primary: #e85d04;
-  --accent-secondary: #dc2f02;
-  --accent-gradient: linear-gradient(135deg, #f48c06 0%, #dc2f02 100%);
-  --accent-gradient-hover: linear-gradient(135deg, #faa307 0%, #e85d04 100%);
-  --text-primary: #f1f5f9;
-  --text-secondary: #94a3b8;
-  --text-tertiary: #64748b;
-  --glass-bg: rgba(15, 23, 42, 0.75);
-  --glass-border: rgba(255, 255, 255, 0.08);
-  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-  --glass-blur: blur(20px);
-  --font-main: 'Georama', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-large: 'Host Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-mono: 'Fira Code', 'Consolas', monospace;
-  --color-border-default: 255, 255, 255, 0.08;
-  --scrollbar-width: 0.25rem;
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --color-primary: #fafafa;
+  --color-primaryAccent: #0f172a;
+  --color-brand: #e85d04;
+  --color-accentFire: #dc2f02;
+  --color-accentGold: #f48c06;
+
+  --color-background: #0a0f1e;
+  --color-background-secondary: #0f172a;
+  --color-background-tertiary: #1e293b;
+
+  --color-secondary: #f1f5f9;
+  --color-border: rgba(var(--color-border-default));
+  --color-accent: #1e293b;
+  --color-muted: #94a3b8;
+  --color-destructive: #dc2f02;
+  --color-positive: #22c55e;
+
+  --font-main: Georama, sans-serif;
+  --font-large: Host Grotesk, sans-serif;
+  --font-mono: Fira Code, monospace;
+  --font-geist: Georama, sans-serif;
+  --font-dmmono: Fira Code, monospace;
+
+  --radius-xl: 14px;
+  --radius-2xl: 20px;
+  --radius-3xl: 28px;
+}
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+}
+
+/* Tailwind v4 dropped v3's `cursor: pointer` on buttons; restore it. */
+@layer base {
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
+@layer utilities {
+  :root {
+    --bg-primary: #0a0f1e;
+    --bg-secondary: #0f172a;
+    --bg-tertiary: #1e293b;
+    --accent-primary: #e85d04;
+    --accent-secondary: #dc2f02;
+    --accent-gradient: linear-gradient(135deg, #f48c06 0%, #dc2f02 100%);
+    --accent-gradient-hover: linear-gradient(135deg, #faa307 0%, #e85d04 100%);
+    --text-primary: #f1f5f9;
+    --text-secondary: #94a3b8;
+    --text-tertiary: #64748b;
+    --glass-bg: rgba(15, 23, 42, 0.75);
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    --glass-blur: blur(20px);
+    --font-main: 'Georama', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-large: 'Host Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'Fira Code', 'Consolas', monospace;
+    --color-border-default: 255, 255, 255, 0.08;
+    --scrollbar-width: 0.25rem;
+  }
 }
 
 @layer base {

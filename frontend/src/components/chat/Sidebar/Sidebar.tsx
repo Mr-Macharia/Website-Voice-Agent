@@ -13,7 +13,7 @@ import VoiceModal from '@/components/voice/VoiceModal'
 
 const SidebarHeader = () => (
   <div className="flex items-center gap-2.5 px-1 py-1">
-    <div className="flex size-8 items-center justify-center rounded-xl bg-gradient-to-tr from-[#e85d04] via-[#f48c06] to-[#dc2f02] shadow-lg shadow-orange-950/50 ring-1 ring-white/20">
+    <div className="flex size-8 items-center justify-center rounded-xl bg-linear-to-tr from-brand via-accentGold to-[#dc2f02] shadow-lg ring-1 shadow-orange-950/50 ring-white/20">
       <span className="font-mono text-xs font-black tracking-tighter text-white">
         GM
       </span>
@@ -22,7 +22,7 @@ const SidebarHeader = () => (
       <span className="truncate font-large text-xs font-bold tracking-tight text-white">
         Gichogu Macharia
       </span>
-      <span className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-[#f48c06]">
+      <span className="flex items-center gap-1 font-mono text-[10px] tracking-wider text-accentGold uppercase">
         <Sparkles className="inline size-2.5" /> AI/ML Engineer
       </span>
     </div>
@@ -40,10 +40,10 @@ const NewChatButton = ({
     onClick={onClick}
     disabled={disabled}
     size="lg"
-    className="h-9 w-full rounded-xl border border-white/10 bg-white/10 text-xs font-medium text-white shadow-sm transition-all hover:border-white/20 hover:bg-white/15"
+    className="h-9 w-full rounded-xl border border-white/10 bg-white/10 text-xs font-medium text-white shadow-xs transition-all hover:border-white/20 hover:bg-white/15"
   >
     <Icon type="plus-icon" size="xs" className="text-white" />
-    <span className="font-mono text-[11px] uppercase tracking-wider">
+    <span className="font-mono text-[11px] tracking-wider uppercase">
       New Chat
     </span>
   </Button>
@@ -53,11 +53,11 @@ const LiveVoiceButton = ({ onClick }: { onClick: () => void }) => (
   <Button
     onClick={onClick}
     size="lg"
-    className="group relative h-10 w-full overflow-hidden rounded-xl border border-[#e85d04]/40 bg-gradient-to-r from-[#e85d04]/20 via-[#f48c06]/15 to-[#dc2f02]/20 text-xs font-semibold text-orange-200 shadow-lg shadow-orange-950/40 transition-all hover:border-[#e85d04] hover:bg-[#e85d04]/30"
+    className="group relative h-10 w-full overflow-hidden rounded-xl border border-brand/40 bg-transparent bg-linear-to-r from-brand/20 via-accentGold/15 to-[#dc2f02]/20 text-xs font-semibold text-orange-200 shadow-lg shadow-orange-950/40 transition-all hover:border-brand hover:bg-brand/30"
   >
-    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
-    <Mic className="size-4 animate-pulse text-[#f48c06] transition-transform group-hover:scale-110" />
-    <span className="font-mono text-[11px] uppercase tracking-wider text-white">
+    <div className="absolute inset-0 bg-linear-to-r from-transparent via-white/5 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+    <Mic className="size-4 animate-pulse text-accentGold transition-transform group-hover:scale-110" />
+    <span className="font-mono text-[11px] tracking-wider text-white uppercase">
       Live Voice Agent
     </span>
   </Button>
@@ -102,7 +102,7 @@ const Sidebar = () => {
       >
         <motion.button
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="absolute right-3 top-3.5 z-10 rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-white/5 hover:text-white"
+          className="absolute top-3.5 right-3 z-10 rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-white/5 hover:text-white"
           aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           type="button"
           whileTap={{ scale: 0.95 }}
@@ -114,7 +114,7 @@ const Sidebar = () => {
           />
         </motion.button>
         <motion.div
-          className="w-[25rem] space-y-4"
+          className="w-100 space-y-4"
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: isCollapsed ? 0 : 1, x: isCollapsed ? -20 : 0 }}
           transition={{ duration: 0.3, ease: 'easeInOut' }}

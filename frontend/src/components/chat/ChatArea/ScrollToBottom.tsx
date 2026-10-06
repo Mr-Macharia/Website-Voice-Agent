@@ -23,7 +23,7 @@ const ScrollToBottom: React.FC = () => {
             onClick={() => scrollToBottom()}
             type="button"
             size="icon"
-            className="size-9 rounded-full border border-[#e85d04]/40 bg-[#0f172a]/90 text-orange-300 shadow-xl shadow-orange-950/40 transition-all hover:border-[#e85d04] hover:bg-[#e85d04]/20 hover:text-white"
+            className="size-9 rounded-full border border-brand/40 bg-[#0f172a]/90 text-orange-300 shadow-xl shadow-orange-950/40 transition-all hover:border-brand hover:bg-brand/20 hover:text-white"
             title="Scroll to latest message"
           >
             <ArrowDown className="size-4" />

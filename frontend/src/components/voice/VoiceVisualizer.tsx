@@ -90,24 +90,24 @@ export const VoiceVisualizer: React.FC<VoiceVisualizerProps> = ({
   const getBarColor = () => {
     switch (state) {
       case 'speaking':
-        return 'bg-gradient-to-t from-[#dc2f02] via-[#e85d04] to-[#faa307] shadow-[0_0_14px_rgba(232,93,4,0.7)]'
+        return 'bg-linear-to-t from-[#dc2f02] via-brand to-[#faa307] shadow-[0_0_14px_rgba(232,93,4,0.7)]'
       case 'listening':
-        return 'bg-gradient-to-t from-[#0284c7] via-[#38bdf8] to-[#67e8f9] shadow-[0_0_14px_rgba(56,189,248,0.7)]'
+        return 'bg-linear-to-t from-[#0284c7] via-[#38bdf8] to-[#67e8f9] shadow-[0_0_14px_rgba(56,189,248,0.7)]'
       case 'thinking':
-        return 'bg-gradient-to-t from-[#d97706] via-[#f59e0b] to-[#fde047] shadow-[0_0_14px_rgba(245,158,11,0.7)]'
+        return 'bg-linear-to-t from-[#d97706] via-[#f59e0b] to-[#fde047] shadow-[0_0_14px_rgba(245,158,11,0.7)]'
       case 'connecting':
-        return 'bg-gradient-to-t from-zinc-600 via-zinc-400 to-zinc-200 shadow-[0_0_8px_rgba(255,255,255,0.15)]'
+        return 'bg-linear-to-t from-zinc-600 via-zinc-400 to-zinc-200 shadow-[0_0_8px_rgba(255,255,255,0.15)]'
       case 'error':
-        return 'bg-gradient-to-t from-red-700 to-rose-500 shadow-[0_0_14px_rgba(244,63,94,0.7)]'
+        return 'bg-linear-to-t from-red-700 to-rose-500 shadow-[0_0_14px_rgba(244,63,94,0.7)]'
       default:
-        return 'bg-gradient-to-t from-zinc-700 to-zinc-500'
+        return 'bg-linear-to-t from-zinc-700 to-zinc-500'
     }
   }
 
   const getAuraColor = () => {
     switch (state) {
       case 'speaking':
-        return 'from-[#e85d04]/25 via-[#dc2f02]/15 to-transparent border-[#e85d04]/40 shadow-[0_0_50px_rgba(232,93,4,0.3)]'
+        return 'from-brand/25 via-[#dc2f02]/15 to-transparent border-brand/40 shadow-[0_0_50px_rgba(232,93,4,0.3)]'
       case 'listening':
         return 'from-sky-500/25 via-cyan-500/10 to-transparent border-sky-500/40 shadow-[0_0_45px_rgba(56,189,248,0.25)]'
       case 'thinking':
@@ -144,7 +144,7 @@ export const VoiceVisualizer: React.FC<VoiceVisualizerProps> = ({
       <div className="relative flex size-44 items-center justify-center">
         {/* Concentric Ambient Aura Rings */}
         <motion.div
-          className={`absolute inset-0 rounded-full border bg-gradient-to-b backdrop-blur-md ${getAuraColor()}`}
+          className={`absolute inset-0 rounded-full border bg-linear-to-b backdrop-blur-md ${getAuraColor()}`}
           animate={{
             scale:
               state === 'speaking'
@@ -195,11 +195,11 @@ export const VoiceVisualizer: React.FC<VoiceVisualizerProps> = ({
 
       {/* State Label Pill */}
       <div className="relative z-10 mt-3.5 flex justify-center">
-        <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-[#0f172a]/95 px-4 py-1.5 font-mono text-[11px] font-medium uppercase tracking-wider text-zinc-200 shadow-xl backdrop-blur-2xl">
+        <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-[#0f172a]/95 px-4 py-1.5 font-mono text-[11px] font-medium tracking-wider text-zinc-200 uppercase shadow-xl backdrop-blur-2xl">
           <span
             className={`size-2 rounded-full ${
               state === 'speaking'
-                ? 'animate-pulse bg-[#e85d04] shadow-[0_0_8px_#e85d04]'
+                ? 'animate-pulse bg-brand shadow-[0_0_8px_#e85d04]'
                 : state === 'listening'
                   ? 'animate-ping bg-sky-400 shadow-[0_0_8px_#38bdf8]'
                   : state === 'thinking'

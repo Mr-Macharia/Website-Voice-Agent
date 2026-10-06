@@ -247,7 +247,7 @@ export const AssemblyAIVoiceModal: React.FC<AssemblyAIVoiceModalProps> = ({
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
       <DialogContent
         hideCloseButton={true}
-        className="max-h-[92vh] max-w-3xl overflow-hidden rounded-3xl border border-white/10 bg-[#0a0f1e] p-0 text-white shadow-2xl ring-1 ring-white/10 backdrop-blur-2xl sm:max-w-[780px] lg:max-w-[820px]"
+        className="max-h-[92vh] max-w-3xl overflow-hidden rounded-3xl border border-white/10 bg-background p-0 text-white shadow-2xl ring-1 ring-white/10 backdrop-blur-2xl sm:max-w-[780px] lg:max-w-[820px]"
       >
         <DialogHeader className="sr-only">
           <DialogTitle>Clyde — portfolio voice agent</DialogTitle>
@@ -257,16 +257,16 @@ export const AssemblyAIVoiceModal: React.FC<AssemblyAIVoiceModalProps> = ({
         </DialogHeader>
 
         {isConnecting ? (
-          <div className="flex h-[520px] flex-col items-center justify-center gap-4 bg-[#0a0f1e]">
-            <RefreshCw className="size-8 animate-spin text-[#f48c06]" />
+          <div className="flex h-[520px] flex-col items-center justify-center gap-4 bg-background">
+            <RefreshCw className="size-8 animate-spin text-accentGold" />
             <div className="font-mono text-sm font-medium text-zinc-300">
               Initializing Voice Session...
             </div>
           </div>
         ) : (
-          <div className="flex h-[680px] max-h-[88vh] w-full flex-col justify-between bg-[#0a0f1e]">
+          <div className="flex h-[680px] max-h-[88vh] w-full flex-col justify-between bg-background">
             {/* Top Status Header */}
-            <div className="flex items-center justify-between border-b border-white/10 bg-[#0a0f1e]/95 px-7 py-4 backdrop-blur-2xl">
+            <div className="flex items-center justify-between border-b border-white/10 bg-background/95 px-7 py-4 backdrop-blur-2xl">
               <div className="flex items-center gap-3">
                 <span className="relative flex size-2.5">
                   <span className="size-full animate-ping rounded-full bg-sky-400 opacity-75" />
@@ -283,7 +283,7 @@ export const AssemblyAIVoiceModal: React.FC<AssemblyAIVoiceModalProps> = ({
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 font-mono text-[11px] text-zinc-300">
                   <span className="text-zinc-500">State:</span>
-                  <span className="font-semibold uppercase text-sky-400">
+                  <span className="font-semibold text-sky-400 uppercase">
                     {state}
                   </span>
                 </div>
@@ -300,7 +300,7 @@ export const AssemblyAIVoiceModal: React.FC<AssemblyAIVoiceModalProps> = ({
 
             {/* Visualizer Centerpiece */}
             <div className="relative flex flex-1 flex-col items-center justify-between overflow-hidden px-8 py-6">
-              <div className="orb-fire pointer-events-none -right-24 -top-24 size-80 opacity-15" />
+              <div className="orb-fire pointer-events-none -top-24 -right-24 size-80 opacity-15" />
 
               <div className="flex shrink-0 flex-col items-center justify-center pt-2">
                 <VoiceVisualizer
@@ -345,7 +345,7 @@ export const AssemblyAIVoiceModal: React.FC<AssemblyAIVoiceModalProps> = ({
                                 : 'border border-white/10 bg-[#0f172a]/80 text-zinc-100'
                             } ${turn.final ? '' : 'opacity-70'}`}
                           >
-                            <span className="mb-0.5 block font-mono text-[10px] uppercase tracking-wide text-zinc-400">
+                            <span className="mb-0.5 block font-mono text-[10px] tracking-wide text-zinc-400 uppercase">
                               {turn.role === 'user' ? 'You' : agentName}
                             </span>
                             {turn.text}

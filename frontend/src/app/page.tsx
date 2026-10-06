@@ -13,10 +13,10 @@ export default function Home() {
         </div>
       }
     >
-      <div className="relative flex h-screen overflow-hidden bg-[#0a0f1e] text-[#f1f5f9]">
+      <div className="relative flex h-screen overflow-hidden bg-background text-secondary">
         {/* Atmospheric Background from gichogumacharia.tech */}
         <div className="bg-grid-dots pointer-events-none fixed inset-0 z-0 opacity-40" />
-        <div className="orb-orange -right-40 -top-40 z-0 size-[550px]" />
+        <div className="orb-orange -top-40 -right-40 z-0 size-[550px]" />
         <div className="orb-fire -bottom-40 -left-40 z-0 size-[480px]" />
 
         {/* Application Layout */}
