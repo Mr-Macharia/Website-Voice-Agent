@@ -75,7 +75,7 @@
          `@theme`, switch PostCSS to `@tailwindcss/postcss`, replace
          `tailwindcss-animate` with `tw-animate-css`, apply the class renames;
          no intended visual change
-  - [ ] 19b. **Responsive chat layout** - sidebar becomes a drawer below `md`,
+  - [x] 19b. **Responsive chat layout** - sidebar becomes a drawer below `md`,
          `h-dvh` instead of `h-screen`/`100vh`, safe-area insets, 44px tap
          targets, chat input stays above the on-screen keyboard, tool cards and
          message widths fit from 360px

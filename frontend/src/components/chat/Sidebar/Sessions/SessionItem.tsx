@@ -38,6 +38,7 @@ const SessionItem = ({
     if (!(agentId || teamId || dbId)) return
 
     onSessionClick()
+    useStore.getState().setMobileSidebarOpen(false)
     await getSession(
       {
         entityType: mode,
@@ -105,7 +106,8 @@ const SessionItem = ({
         <Button
           variant="ghost"
           size="icon"
-          className="transform opacity-0 transition-all duration-200 ease-in-out group-hover:opacity-100"
+          aria-label="Delete session"
+          className="size-11 transform opacity-0 transition-all duration-200 ease-in-out group-hover:opacity-100 lg:size-9 [@media(hover:none)]:opacity-100"
           onClick={(e) => {
             e.stopPropagation()
             setIsDeleteModalOpen(true)

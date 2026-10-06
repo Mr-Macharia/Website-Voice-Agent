@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { NuqsAdapter } from 'nuqs/adapters/next/app'
 import { Toaster } from '@/components/ui/sonner'
 import './globals.css'
@@ -7,6 +7,16 @@ export const metadata: Metadata = {
   title: 'Gichogu Macharia | A Portfolio You Can Talk To',
   description:
     'A portfolio you can hold a conversation with. Ask Clyde about my work, my projects and my experience, or book a time — by text or by voice.'
+}
+
+// viewportFit 'cover' lets the layout read the notch/home-bar safe-area
+// insets; interactiveWidget makes Android Chrome shrink the page when the
+// keyboard opens. Zoom stays enabled on purpose.
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+  interactiveWidget: 'resizes-content'
 }
 
 export default function RootLayout({
@@ -28,7 +38,7 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body className="min-h-screen overflow-x-hidden bg-background font-main text-secondary antialiased selection:bg-brand/30 selection:text-white">
+      <body className="min-h-dvh overflow-x-hidden bg-background font-main text-secondary antialiased selection:bg-brand/30 selection:text-white">
         <NuqsAdapter>{children}</NuqsAdapter>
         <Toaster
           toastOptions={{
