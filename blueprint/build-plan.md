@@ -79,6 +79,11 @@
          `h-dvh` instead of `h-screen`/`100vh`, safe-area insets, 44px tap
          targets, chat input stays above the on-screen keyboard, tool cards and
          message widths fit from 360px
-  - [ ] 19c. **Mobile voice** - AssemblyAI voice modal becomes a full-screen
-         sheet on phones; mic/audio start from a tap (iOS Safari), and the
-         session recovers or ends cleanly after screen lock or tab backgrounding
+  - [ ] 19c. **Mobile voice and audio-reactive voice UI** - AssemblyAI voice
+         modal becomes a full-screen sheet on phones; audio starts inside the
+         tap (iOS Safari); the session detects a dropped socket or mic after
+         screen lock or tab backgrounding and offers reconnect or ends cleanly;
+         error state with retry; the bar visualizer is replaced by a canvas
+         aura driven by the real mic and reply analysers, with a reduced-motion
+         fallback; chat polish borrowed from assistant-ui (sticky scroll,
+         jump-to-latest, Stop, copy action)

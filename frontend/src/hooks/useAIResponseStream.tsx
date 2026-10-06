@@ -184,6 +184,8 @@ export default function useAIResponseStream() {
       onChunk: (chunk: RunResponseContent) => void
       onError: (error: Error) => void
       onComplete: () => void
+      /** Aborting ends the stream quietly, keeping what already arrived. */
+      signal?: AbortSignal
     }): Promise<void> => {
       const {
         apiUrl,
@@ -191,7 +193,8 @@ export default function useAIResponseStream() {
         requestBody,
         onChunk,
         onError,
-        onComplete
+        onComplete,
+        signal
       } = options
 
       // Buffer to accumulate partial JSON data.
@@ -203,6 +206,7 @@ export default function useAIResponseStream() {
           // Sends the visitor cookie so the run is stamped with the browser
           // that made it, and lands in that visitor's session list.
           credentials: 'include',
+          signal,
           headers: {
             // Set content-type only for non-FormData requests.
             ...(!(requestBody instanceof FormData) && {
@@ -245,6 +249,10 @@ export default function useAIResponseStream() {
         }
         await processStream()
       } catch (error) {
+        if (signal?.aborted) {
+          onComplete()
+          return
+        }
         if (typeof error === 'object' && error !== null && 'detail' in error) {
           onError(new Error(String(error.detail)))
         } else {

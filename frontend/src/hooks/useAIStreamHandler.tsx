@@ -10,6 +10,17 @@ import useAIResponseStream from './useAIResponseStream'
 import { ToolCall } from '@/types/os'
 import { useQueryState } from 'nuqs'
 
+/**
+ * The run in flight, so the composer's Stop button can end it. One chat
+ * streams at a time, so a module-level handle is enough.
+ */
+let activeRun: AbortController | null = null
+
+/** Stop the streaming reply, keeping the text that already arrived. */
+export function stopStreaming() {
+  activeRun?.abort()
+}
+
 const useAIChatStreamHandler = () => {
   const setMessages = useStore((state) => state.setMessages)
   const { addMessage, focusChatInput } = useChatActions()
@@ -101,6 +112,8 @@ const useAIChatStreamHandler = () => {
   const handleStreamResponse = useCallback(
     async (input: string | FormData) => {
       setIsStreaming(true)
+      const run = new AbortController()
+      activeRun = run
 
       const formData = input instanceof FormData ? input : new FormData()
       if (typeof input === 'string') {
@@ -172,6 +185,7 @@ const useAIChatStreamHandler = () => {
           apiUrl: RunUrl,
           headers,
           requestBody: formData,
+          signal: run.signal,
           onChunk: (chunk: RunResponse) => {
             if (
               chunk.event === RunEvent.RunStarted ||
@@ -412,6 +426,16 @@ const useAIChatStreamHandler = () => {
           )
         }
       } finally {
+        // Stopped before any text arrived: say so instead of leaving the
+        // thinking loader spinning in an empty bubble.
+        if (run.signal.aborted) {
+          setMessages((prev) => {
+            const last = prev[prev.length - 1]
+            if (!last || last.role !== 'agent' || last.content) return prev
+            return [...prev.slice(0, -1), { ...last, content: '_Stopped._' }]
+          })
+        }
+        if (activeRun === run) activeRun = null
         focusChatInput()
         setIsStreaming(false)
       }

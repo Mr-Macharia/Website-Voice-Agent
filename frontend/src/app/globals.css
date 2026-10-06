@@ -28,6 +28,15 @@
   --font-geist: Georama, sans-serif;
   --font-dmmono: Fira Code, monospace;
 
+  /* Voice states (feature 19c): drive the aura, status text and dock. */
+  --color-voice-listening: #38bdf8;
+  --color-voice-thinking: #a78bfa;
+  --color-voice-speaking: #f48c06;
+  --color-voice-muted: #64748b;
+  --color-voice-error: #f43f5e;
+  --color-faint: #8391a7;
+  --spacing-voice-control: 56px;
+
   --radius-xl: 14px;
   --radius-2xl: 20px;
   --radius-3xl: 28px;
@@ -98,18 +107,30 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
-  h1, h2, h3, h4, h5, h6, .font-large {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  .font-large {
     font-family: var(--font-large);
   }
 
-  code, pre, .font-mono {
+  code,
+  pre,
+  .font-mono {
     font-family: var(--font-mono);
   }
 }
 
 /* Atmospheric Background Elements */
 .bg-grid-dots {
-  background-image: radial-gradient(circle, rgba(255, 255, 255, 0.07) 1px, transparent 1px);
+  background-image: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.07) 1px,
+    transparent 1px
+  );
   background-size: 28px 28px;
 }
 
@@ -163,7 +184,8 @@
 }
 
 @keyframes floatOrb {
-  0%, 100% {
+  0%,
+  100% {
     transform: translate(0, 0) scale(1);
   }
   25% {
@@ -195,4 +217,86 @@
 
 ::-webkit-scrollbar-track {
   background-color: transparent;
+}
+
+/* Voice dock (feature 19c): liquid press and the listening droplet.
+   Tailwind v4 positions with the `translate` property, so these animate
+   `scale` / `transform` without fighting the centring. */
+.voice-squish {
+  animation: voice-squish 0.42s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+@keyframes voice-squish {
+  30% {
+    scale: 1.25 0.78;
+  }
+  60% {
+    scale: 0.9 1.12;
+  }
+}
+.voice-seep {
+  animation: voice-seep 2.2s ease-in-out infinite;
+}
+@keyframes voice-seep {
+  0% {
+    transform: translateX(0) scale(0.4);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.9;
+  }
+  60% {
+    transform: translateX(46px) scale(1);
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateX(84px) scale(0.3);
+    opacity: 0;
+  }
+}
+/* Live caption: newest words arrive softly (blur + rise + fade). */
+.voice-word {
+  display: inline-block;
+  white-space: pre;
+  animation: voice-word 0.45s ease-out both;
+}
+@keyframes voice-word {
+  from {
+    opacity: 0;
+    filter: blur(4px);
+    transform: translateY(4px);
+  }
+}
+/* A turn settling from the live caption into the history. */
+.voice-bubble-in {
+  animation: voice-bubble-in 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@keyframes voice-bubble-in {
+  from {
+    opacity: 0;
+    filter: blur(3px);
+    transform: translateY(14px) scale(0.97);
+  }
+}
+.voice-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: -0.15em;
+  background: currentColor;
+  animation: voice-caret 1s steps(2) infinite;
+}
+@keyframes voice-caret {
+  50% {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .voice-bubble-in,
+  .voice-caret,
+  .voice-word,
+  .voice-squish,
+  .voice-seep {
+    animation: none;
+  }
 }

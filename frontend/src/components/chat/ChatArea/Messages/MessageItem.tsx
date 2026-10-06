@@ -5,15 +5,52 @@ import type { ChatMessage } from '@/types/os'
 import Videos from './Multimedia/Videos'
 import Images from './Multimedia/Images'
 import Audios from './Multimedia/Audios'
-import { memo } from 'react'
+import { memo, useState } from 'react'
 import AgentThinkingLoader from './AgentThinkingLoader'
-import { Sparkles, User } from 'lucide-react'
+import { Check, Copy, Sparkles, User } from 'lucide-react'
 
 interface MessageProps {
   message: ChatMessage
 }
 
+/**
+ * Copy action under an agent reply (action-bar pattern from assistant-ui).
+ * Hover-revealed with a pointer, always visible on touch.
+ */
+const CopyAction = ({ text }: { text: string }) => {
+  const [copied, setCopied] = useState(false)
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1500)
+    } catch {
+      /* clipboard blocked: nothing to do */
+    }
+  }
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      aria-label={copied ? 'Copied' : 'Copy reply'}
+      className="inline-flex h-11 items-center gap-1.5 rounded-lg px-2 font-mono text-xs text-muted transition-opacity hover:text-white focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-accentGold lg:h-8 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100"
+    >
+      {copied ? (
+        <Check className="size-3.5" aria-hidden="true" />
+      ) : (
+        <Copy className="size-3.5" aria-hidden="true" />
+      )}
+      <span aria-live="polite">{copied ? 'Copied' : 'Copy'}</span>
+    </button>
+  )
+}
+
 const AgentMessage = ({ message }: MessageProps) => {
+  const { isStreaming, messages } = useStore()
+  const isLive = isStreaming && messages[messages.length - 1] === message
+  const copyText = message.content
+    ? stripEmptyFences(stripToolPayload(message.content)).trim()
+    : ''
   const { streamingErrorMessage } = useStore()
   let messageContent
   if (message.streamingError) {
@@ -72,13 +109,18 @@ const AgentMessage = ({ message }: MessageProps) => {
   }
 
   return (
-    <div className="flex w-full justify-start">
+    <div className="group flex w-full flex-col items-start">
       <div className="flex max-w-[88%] items-start gap-3.5 rounded-3xl rounded-tl-sm border border-white/10 bg-[#0f172a]/80 p-3.5 text-zinc-100 shadow-xl backdrop-blur-2xl transition-all hover:border-white/20 sm:p-5">
         <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-xl bg-linear-to-tr from-brand to-accentGold text-white shadow-md shadow-orange-950/50">
           <Sparkles className="size-4" />
         </div>
         <div className="min-w-0 flex-1 wrap-break-word">{messageContent}</div>
       </div>
+      {copyText && !isLive && !message.streamingError && (
+        <div className="mt-1 pl-2">
+          <CopyAction text={copyText} />
+        </div>
+      )}
     </div>
   )
 }

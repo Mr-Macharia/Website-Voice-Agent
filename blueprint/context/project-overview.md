@@ -1,6 +1,6 @@
 # Voice Agent - Project Overview
 
-<!-- blueprint:source-hash 24bc5d404bafd58a5320d76e59c179b190ed71444d6bedad639650d9f5811335 -->
+<!-- blueprint:source-hash aa82a170938b6249ddf872fc012beb916c498bd3552e791cb470a39db23e8cf0 -->
 
 > A real-time voice and text AI assistant on Gichogu Macharia's personal
 > website that answers questions about him, hands visitors to his Cal.com
@@ -64,11 +64,16 @@ No access tiers; every visitor is anonymous and gets the same assistant.
     allowlist.
 18. **Production deployment prep** - Vercel frontend and Heroku backend config,
     env review, `/api/leads` rate-limit hardening (`backend/core/rate_limit.py`).
-19. **Mobile-optimized UI and usage** *(next, unchecked)* - upgrade Tailwind
-    CSS v3.4 to v4.3 first, then phone-browser support: collapsible sidebar
-    drawer, touch-sized controls, safe-area and on-screen-keyboard handling,
-    full-screen voice sheet, mobile voice behaviour (tap-to-start mic/audio on
-    iOS Safari, recovery after screen lock or tab backgrounding).
+19. **Mobile-optimized UI and usage** *(in progress)* - three sub-items:
+    - 19a. Tailwind CSS v4.3 upgrade *(done)*.
+    - 19b. Responsive chat layout *(done)*: sidebar drawer, 44px touch targets,
+      safe areas, `dvh` heights, no sideways scroll from 360px.
+    - 19c. Mobile voice and audio-reactive voice UI *(next)*: AssemblyAI voice
+      modal as a full-screen sheet on phones; audio starts inside the tap (iOS
+      Safari); detect a dropped socket or mic after screen lock or
+      backgrounding and offer reconnect or end cleanly; error state with
+      retry; canvas aura visualizer driven by the real mic and reply analysers,
+      with a reduced-motion fallback.
 
 ## Data model
 
