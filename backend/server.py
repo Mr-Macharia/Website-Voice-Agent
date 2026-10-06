@@ -37,6 +37,7 @@ from core import config as core_config
 from core import db as core_db
 from core import guardrails
 from core import knowledge as core_knowledge
+from core import routing as jev_routing
 from core import persona
 from core import rate_limit
 from core import visitor as core_visitor
@@ -204,7 +205,10 @@ text_agent = Agent(
     tools=_agent_tools,
     description=f"Clyde answers questions about {core_config.OWNER_NAME} and books meetings.",
     instructions=[TEXT_AGENT_SYSTEM_PROMPT],
-    post_hooks=[_clean_agent_output],
+    # Jev shadow routing logs its decision beside the agent's real tool use; it
+    # is a no-op unless JEV_ROUTING_MODE=shadow and TYPESAFE_API_KEY is set.
+    pre_hooks=[jev_routing.shadow_pre_hook],
+    post_hooks=[_clean_agent_output, jev_routing.shadow_post_hook],
     markdown=True,
     db=db,
     knowledge=_knowledge,

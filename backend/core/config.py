@@ -239,6 +239,20 @@ ASSEMBLYAI_INTERRUPTION_DELAY = _get_int("ASSEMBLYAI_INTERRUPTION_DELAY", 100)
 LLM_PROXY_URL = _get("LLM_PROXY_URL")
 LLM_PROXY_SECRET = _get("LLM_PROXY_SECRET")
 
+# --- Jev (TypeSafe System One) routing -------------------------------------
+# A cheap, ~100 ms classifier that answers narrow typed questions about each
+# visitor message (does it need the knowledge base? which tool fits?). It never
+# writes replies — the LLM still does that.
+#   off    - never called (default)
+#   shadow - called in the background and logged, changes nothing the visitor sees
+#   on     - decisions are acted on (not implemented yet)
+TYPESAFE_API_KEY = _get("TYPESAFE_API_KEY")
+JEV_ROUTING_MODE = (_get("JEV_ROUTING_MODE", "off") or "off").lower()
+JEV_MODEL = _get("JEV_MODEL", "jev-latest")
+# Seconds. Jev is in the request path in "on" mode, so it must fail fast and
+# fall back to today's behaviour rather than stall a reply.
+JEV_TIMEOUT = float(_get("JEV_TIMEOUT", "1.5") or "1.5")
+
 # --- Content --------------------------------------------------------------
 CONTENT_DIR = BACKEND_DIR / "content"
 DOCUMENTS_DIR = CONTENT_DIR / "documents"
@@ -280,6 +294,10 @@ def voice_available() -> bool:
 
 def llm_available() -> bool:
     return bool(BEDROCK_API_KEY or XAI_API_KEY or OPENAI_API_KEY)
+
+
+def jev_available() -> bool:
+    return bool(TYPESAFE_API_KEY) and JEV_ROUTING_MODE in {"shadow", "on"}
 
 
 def lead_notification_available() -> bool:

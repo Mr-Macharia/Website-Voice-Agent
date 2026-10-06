@@ -30,4 +30,5 @@ dependencies = [
     # Used directly by voice/llm_proxy.py to stream chat completions upstream.
     # Was only ever a transitive dependency before.
     "httpx>=0.27.0",
+    "typesafe-sdk>=0.7.2",
 ]
