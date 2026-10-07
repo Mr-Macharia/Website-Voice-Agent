@@ -1,0 +1,18 @@
+{
+  "enabledMcpjsonServers": [
+    "deepgram",
+    "agno-docs",
+    "livekit-docs",
+    "voice-agent"
+  ],
+  "permissions": {
+    "allow": [
+      "Bash(git push heroku:*)"
+    ]
+  },
+  "attribution": {
+    "commit": "",
+    "pr": "",
+    "sessionUrl": false
+  }
+}

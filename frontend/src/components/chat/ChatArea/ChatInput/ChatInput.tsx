@@ -5,10 +5,12 @@ import { TextArea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { useStore } from '@/store'
 import { DEFAULT_AGENT_NAME } from '@/lib/agentIdentity'
-import useAIChatStreamHandler from '@/hooks/useAIStreamHandler'
+import useAIChatStreamHandler, {
+  stopStreaming
+} from '@/hooks/useAIStreamHandler'
 import { useQueryState } from 'nuqs'
 import Icon from '@/components/ui/icon'
-import { Mic, Sparkles } from 'lucide-react'
+import { Mic, Sparkles, Square } from 'lucide-react'
 import VoiceModal from '@/components/voice/VoiceModal'
 
 const ChatInput = () => {
@@ -82,18 +84,27 @@ const ChatInput = () => {
             <Mic className="size-4 animate-pulse" />
           </Button>
 
-          {/* Text Send Button */}
-          <Button
-            onClick={handleSubmit}
-            aria-label="Send message"
-            disabled={
-              !(selectedAgent || teamId) || !inputMessage.trim() || isStreaming
-            }
-            size="icon"
-            className="size-11 shrink-0 rounded-xl bg-linear-to-tr from-brand to-accentGold p-0 text-white shadow-md shadow-orange-950/40 transition-all hover:brightness-110 disabled:opacity-30 disabled:brightness-100 lg:size-10"
-          >
-            <Icon type="send" color="white" />
-          </Button>
+          {/* Send, or Stop while a reply streams (pattern from assistant-ui) */}
+          {isStreaming ? (
+            <Button
+              onClick={stopStreaming}
+              aria-label="Stop generating"
+              size="icon"
+              className="size-11 shrink-0 rounded-xl border border-white/15 bg-white/10 p-0 text-white transition-all hover:bg-white/20 lg:size-10"
+            >
+              <Square className="size-3.5 fill-current" aria-hidden="true" />
+            </Button>
+          ) : (
+            <Button
+              onClick={handleSubmit}
+              aria-label="Send message"
+              disabled={!(selectedAgent || teamId) || !inputMessage.trim()}
+              size="icon"
+              className="size-11 shrink-0 rounded-xl bg-linear-to-tr from-brand to-accentGold p-0 text-white shadow-md shadow-orange-950/40 transition-all hover:brightness-110 disabled:opacity-30 disabled:brightness-100 lg:size-10"
+            >
+              <Icon type="send" color="white" />
+            </Button>
+          )}
         </div>
 
         {/* Input Helper Hint */}

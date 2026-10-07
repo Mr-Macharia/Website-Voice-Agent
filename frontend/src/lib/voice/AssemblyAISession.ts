@@ -23,7 +23,12 @@ export type VoiceSessionState =
   | 'listening'
   | 'thinking'
   | 'speaking'
+  /** The connection or microphone went away mid-session (screen lock, network). */
+  | 'dropped'
   | 'error'
+
+/** Why a session failed, so the UI can offer the right way out. */
+export type VoiceErrorKind = 'mic-blocked' | 'no-mic' | 'other'
 
 export interface VoiceTurn {
   id: string
@@ -33,7 +38,12 @@ export interface VoiceTurn {
 }
 
 export interface VoiceSessionCallbacks {
-  onStateChange: (state: VoiceSessionState, message?: string) => void
+  /** `kind` is present only with `'error'`. */
+  onStateChange: (
+    state: VoiceSessionState,
+    message?: string,
+    kind?: VoiceErrorKind
+  ) => void
   onUserPartial: (text: string) => void
   onUserFinal: (text: string) => void
   onAgentFinal: (text: string) => void
@@ -126,10 +136,34 @@ export class AssemblyAISession {
     this.onVisibilityChange = () => {
       // iOS suspends the AudioContext when the tab is backgrounded, which
       // kills the mic pipeline silently. Resume when we come back.
-      if (!document.hidden && this.audioCtx?.state === 'suspended') {
+      if (document.hidden || this.cleanedUp || !this.sessionReady) return
+      // A locked phone often kills the socket or the mic track outright;
+      // resuming audio cannot bring those back, so report the drop instead.
+      if (this.ws?.readyState !== WebSocket.OPEN || this.micEnded()) {
+        this.drop()
+        return
+      }
+      if (this.audioCtx?.state === 'suspended') {
         void this.audioCtx.resume().catch(() => {})
       }
     }
+  }
+
+  /** Microphone level, 0..1. Safe to call in any state. */
+  getMicLevel(): number {
+    return this.muted ? 0 : micLevelOf(this.micAnalyser)
+  }
+
+  /** Reply (agent voice) level, 0..1. Safe to call in any state. */
+  getReplyLevel(): number {
+    return levelOf(this.outAnalyser)
+  }
+
+  private micEnded(): boolean {
+    return (
+      this.micStream?.getAudioTracks().some((t) => t.readyState === 'ended') ??
+      false
+    )
   }
 
   get isMuted() {
@@ -143,6 +177,17 @@ export class AssemblyAISession {
   async start(apiBase: string): Promise<void> {
     this.apiBase = apiBase
     this.callbacks.onStateChange('connecting')
+
+    // iOS Safari only lets audio start inside the user's tap. Everything up to
+    // here is synchronous, so create and resume the context before the first
+    // await; awaiting the token first would leave replies silent on iPhones.
+    try {
+      this.audioCtx = new AudioContext()
+      void this.audioCtx.resume().catch(() => {})
+    } catch {
+      this.fail("Your browser couldn't start audio. Try another browser.")
+      return
+    }
 
     // 1. Token and session config from our backend. The AssemblyAI key stays
     //    server-side; the persona prompt lives in Python and is forwarded
@@ -170,7 +215,6 @@ export class AssemblyAISession {
     // 2. Audio context and microphone. Must run inside the user-gesture call
     //    stack or the browser refuses to start audio.
     try {
-      this.audioCtx = new AudioContext()
       await this.audioCtx.resume()
       await this.audioCtx.audioWorklet.addModule('/worklets/pcm-processor.js')
       this.micStream = await navigator.mediaDevices.getUserMedia({
@@ -207,9 +251,12 @@ export class AssemblyAISession {
       name === 'PermissionDeniedError' ||
       name === 'SecurityError'
     ) {
-      this.fail('I need microphone access to hear you. Allow it and try again.')
+      this.fail(
+        'I need microphone access to hear you. Allow it and try again.',
+        'mic-blocked'
+      )
     } else if (name === 'NotFoundError') {
-      this.fail("I couldn't find a microphone on this device.")
+      this.fail("I couldn't find a microphone on this device.", 'no-mic')
     } else {
       this.fail(
         "I couldn't start the microphone. Check your audio settings and try again."
@@ -257,12 +304,8 @@ export class AssemblyAISession {
         if (!this.sessionReady && !this.endedByUser) {
           bail(new Error('closed before ready'))
         } else {
-          this.cleanup()
-          if (!this.endedByUser) {
-            this.fail(
-              'The connection dropped and the session ended. Start again when ready.'
-            )
-          }
+          if (this.endedByUser) this.cleanup()
+          else this.drop()
         }
       }
 
@@ -459,6 +502,10 @@ export class AssemblyAISession {
     this.micSource.connect(this.micAnalyser)
     this.micSource.connect(this.worklet)
     document.addEventListener('visibilitychange', this.onVisibilityChange)
+    // Another app taking the mic, or the OS revoking it, ends the track.
+    this.micStream!.getAudioTracks().forEach((t) =>
+      t.addEventListener('ended', () => this.drop())
+    )
 
     // Reply audio: analyser (drives the visualizer) → gain → speakers.
     this.outAnalyser = ctx.createAnalyser()
@@ -556,9 +603,16 @@ export class AssemblyAISession {
     }
   }
 
-  private fail(message: string): void {
+  private fail(message: string, kind: VoiceErrorKind = 'other'): void {
     this.cleanup()
-    this.callbacks.onStateChange('error', message)
+    this.callbacks.onStateChange('error', message, kind)
+  }
+
+  /** The session was live and went away without the visitor ending it. */
+  private drop(): void {
+    if (this.cleanedUp) return
+    this.cleanup()
+    this.callbacks.onStateChange('dropped')
   }
 
   private cleanup(): void {
@@ -587,4 +641,35 @@ export class AssemblyAISession {
     void this.audioCtx?.close()
     this.audioCtx = null
   }
+}
+
+/** RMS of an analyser's waveform, scaled so normal speech reaches ~1. */
+/**
+ * Mic level on a loudness (dB) scale. Raw speech into a mic is quiet
+ * (RMS ~0.01-0.1), so a linear reading barely moved the aura while the
+ * visitor talked. Maps about -55 dB (room hush) to 0 and -18 dB (clear
+ * speech) to 1, reading float samples for resolution in quiet passages.
+ */
+function micLevelOf(analyser: AnalyserNode | null): number {
+  if (!analyser) return 0
+  const buf = new Float32Array(analyser.fftSize)
+  analyser.getFloatTimeDomainData(buf)
+  let sum = 0
+  for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i]
+  const rms = Math.sqrt(sum / buf.length)
+  if (rms <= 0) return 0
+  const db = 20 * Math.log10(rms)
+  return Math.min(1, Math.max(0, (db + 55) / 37))
+}
+
+function levelOf(analyser: AnalyserNode | null): number {
+  if (!analyser) return 0
+  const buf = new Uint8Array(analyser.fftSize)
+  analyser.getByteTimeDomainData(buf)
+  let sum = 0
+  for (let i = 0; i < buf.length; i++) {
+    const v = (buf[i] - 128) / 128
+    sum += v * v
+  }
+  return Math.min(1, Math.sqrt(sum / buf.length) * 4)
 }
