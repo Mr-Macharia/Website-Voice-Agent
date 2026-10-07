@@ -1,6 +1,6 @@
 # Voice Agent - Project Overview
 
-<!-- blueprint:source-hash aa82a170938b6249ddf872fc012beb916c498bd3552e791cb470a39db23e8cf0 -->
+<!-- blueprint:source-hash 90926b06092ad88a97577500276f9d9610842f3e053c20d457764073d8bf0476 -->
 
 > A real-time voice and text AI assistant on Gichogu Macharia's personal
 > website that answers questions about him, hands visitors to his Cal.com

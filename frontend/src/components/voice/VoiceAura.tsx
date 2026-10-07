@@ -143,7 +143,9 @@ vec2 warp(vec2 p, float t, float it){
 void main(){
   vec2 p = gl_FragCoord.xy / uRes - 0.5;
   p.x *= uRes.x / uRes.y;
-  float t = uTime * 0.05 * uSpeed;
+  // uTime is a phase accumulated on the CPU (speed already applied), so a
+  // speed change bends the motion instead of jumping it.
+  float t = uTime;
   vec3 core = vec3(0.0);
   vec2 prev = warp(p, t, -1.0/32.0);
   for (float i = 1.0; i <= 32.0; i++){
@@ -296,7 +298,6 @@ export function VoiceAura({ state, getLevel, className }: VoiceAuraProps) {
       const level = REACTIVE.includes(st)
         ? Math.min(1, Math.max(0, levelRef.current()))
         : 0
-      sim.t += dt
       sim.phase += dt
       sim.speed += (target.speed - sim.speed) * Math.min(1, dt * 1.2)
       // Voice envelope: rise quickly with a syllable, fall slowly, so the
@@ -305,7 +306,9 @@ export function VoiceAura({ state, getLevel, className }: VoiceAuraProps) {
       sim.env += (level - sim.env) * Math.min(1, env * dt * 60)
       // Near-critically damped: swells and settles without shaking.
       const scale = spring(sim.scale, target.scale + sim.env * 0.12, dt, 90, 18)
-      const amp = spring(sim.amp, target.amp, dt)
+      // Always drifting; sound is the response: silence keeps a gentle
+      // living motion, the voice envelope lifts wave height and pace.
+      const amp = spring(sim.amp, target.amp * 0.6 + sim.env * 0.7, dt)
       const freq = spring(sim.freq, target.freq, dt)
       // Phase advances by the eased rate, so a state change never jumps the pulse.
       sim.pulseRate +=
@@ -329,6 +332,7 @@ export function VoiceAura({ state, getLevel, className }: VoiceAuraProps) {
       gl.clearColor(0, 0, 0, 0)
       gl.clear(gl.COLOR_BUFFER_BIT)
       gl.uniform2f(U.res, canvas.width, canvas.height)
+      sim.t += dt * 0.05 * (sim.speed * 0.6 + sim.env * 20)
       gl.uniform1f(U.time, sim.t)
       gl.uniform3fv(U.color, sim.color)
       gl.uniform1f(U.speed, sim.speed)

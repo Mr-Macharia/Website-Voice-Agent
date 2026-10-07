@@ -71,9 +71,6 @@ export function VoiceDock({
           style={{ filter: `url(#${filterId})` }}
           aria-hidden="true"
         >
-          {isListening && !isMuted && (
-            <span className="voice-seep absolute top-1/2 left-[58px] size-7 -translate-x-1/2 -translate-y-1/2 rounded-full bg-voice-listening" />
-          )}
           <span
             ref={micBlob}
             className={cn(
@@ -102,7 +99,14 @@ export function VoiceDock({
             onClick={onToggleMute}
             aria-pressed={isMuted}
             aria-label={isMuted ? 'Unmute microphone' : 'Mute microphone'}
-            className="grid size-voice-control place-items-center rounded-full text-white focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accentGold"
+            className={cn(
+              'grid size-voice-control place-items-center rounded-full text-white ring-2 transition-[box-shadow] duration-500 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accentGold',
+              // Listening: a soft blue halo on the mic. (The goo droplet
+              // didn't render on mobile browsers and floated loose.)
+              isListening && !isMuted
+                ? 'shadow-[0_0_18px_rgba(56,189,248,0.45)] ring-voice-listening/70'
+                : 'ring-transparent'
+            )}
           >
             {isMuted ? (
               <MicOff className="size-6" aria-hidden="true" />

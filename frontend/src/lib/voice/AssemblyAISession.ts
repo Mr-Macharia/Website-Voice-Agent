@@ -151,7 +151,7 @@ export class AssemblyAISession {
 
   /** Microphone level, 0..1. Safe to call in any state. */
   getMicLevel(): number {
-    return this.muted ? 0 : levelOf(this.micAnalyser)
+    return this.muted ? 0 : micLevelOf(this.micAnalyser)
   }
 
   /** Reply (agent voice) level, 0..1. Safe to call in any state. */
@@ -644,6 +644,24 @@ export class AssemblyAISession {
 }
 
 /** RMS of an analyser's waveform, scaled so normal speech reaches ~1. */
+/**
+ * Mic level on a loudness (dB) scale. Raw speech into a mic is quiet
+ * (RMS ~0.01-0.1), so a linear reading barely moved the aura while the
+ * visitor talked. Maps about -55 dB (room hush) to 0 and -18 dB (clear
+ * speech) to 1, reading float samples for resolution in quiet passages.
+ */
+function micLevelOf(analyser: AnalyserNode | null): number {
+  if (!analyser) return 0
+  const buf = new Float32Array(analyser.fftSize)
+  analyser.getFloatTimeDomainData(buf)
+  let sum = 0
+  for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i]
+  const rms = Math.sqrt(sum / buf.length)
+  if (rms <= 0) return 0
+  const db = 20 * Math.log10(rms)
+  return Math.min(1, Math.max(0, (db + 55) / 37))
+}
+
 function levelOf(analyser: AnalyserNode | null): number {
   if (!analyser) return 0
   const buf = new Uint8Array(analyser.fftSize)
