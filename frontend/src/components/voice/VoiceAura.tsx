@@ -125,7 +125,11 @@ const REACTIVE: AuraState[] = ['listening', 'speaking']
 const IS_TOUCH =
   typeof window !== 'undefined' &&
   window.matchMedia('(pointer: coarse)').matches
-const MAX_DPR = IS_TOUCH ? 1 : 2
+// Touch: render below 1x and let CSS upscale; the glow is soft, so the
+// lower internal resolution isn't visible but saves most of the GPU work.
+const MAX_DPR = IS_TOUCH ? 0.6 : 2
+/** Touch devices draw at ~30fps: steady beats a stuttering 60. */
+const FRAME_MS = IS_TOUCH ? 33 : 0
 const PASSES = IS_TOUCH ? 16 : 32
 /** Slow clockwise turn, radians per second (one turn per ~70s). */
 const SPIN = 0.09
@@ -300,7 +304,9 @@ export function VoiceAura({ state, getLevel, className }: VoiceAuraProps) {
     }
 
     const resize = () => {
-      const dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR)
+      const dpr = IS_TOUCH
+        ? MAX_DPR
+        : Math.min(window.devicePixelRatio || 1, MAX_DPR)
       const w = Math.round(canvas.clientWidth * dpr)
       const h = Math.round(canvas.clientHeight * dpr)
       if (canvas.width !== w || canvas.height !== h) {
@@ -370,10 +376,11 @@ export function VoiceAura({ state, getLevel, className }: VoiceAuraProps) {
     let raf = 0
     let prev = performance.now()
     const loop = (now: number) => {
+      raf = requestAnimationFrame(loop)
+      if (now - prev < FRAME_MS) return
       const dt = Math.min(0.05, (now - prev) / 1000)
       prev = now
       draw(dt)
-      raf = requestAnimationFrame(loop)
     }
     const run = () => {
       cancelAnimationFrame(raf)

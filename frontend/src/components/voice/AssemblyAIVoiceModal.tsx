@@ -395,7 +395,7 @@ export const AssemblyAIVoiceModal: React.FC<AssemblyAIVoiceModalProps> = ({
         </div>
 
         {/* Desktop header: identity left, plain-words state and close right */}
-        <div className="hidden shrink-0 items-center justify-between border-b border-white/10 bg-background/95 px-7 py-4 backdrop-blur-2xl lg:flex">
+        <div className="hidden shrink-0 items-center justify-between border-b border-white/10 bg-background/95 px-7 py-4 backdrop-blur-2xl lg:flex pointer-coarse:backdrop-blur-none">
           <div className="flex items-center gap-3">
             <span className="relative flex size-2.5" aria-hidden="true">
               {isLive && !isMuted && (
@@ -444,7 +444,7 @@ export const AssemblyAIVoiceModal: React.FC<AssemblyAIVoiceModalProps> = ({
 
         {/* Phone top: status chip, close only when no call is running */}
         <div className="relative flex shrink-0 items-center justify-center px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-2 lg:hidden">
-          <span className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/6 px-3.5 py-1.5 font-mono text-xs tracking-wide shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] backdrop-blur-md">
+          <span className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/6 px-3.5 py-1.5 font-mono text-xs tracking-wide shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] backdrop-blur-md pointer-coarse:backdrop-blur-none">
             <span
               className={cn(
                 'size-[7px] rounded-full',
@@ -618,7 +618,7 @@ export const AssemblyAIVoiceModal: React.FC<AssemblyAIVoiceModalProps> = ({
                         >
                           <div
                             className={cn(
-                              'voice-bubble-in max-w-[85%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed text-zinc-200 backdrop-blur-md',
+                              'voice-bubble-in max-w-[85%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed text-zinc-200 backdrop-blur-md pointer-coarse:backdrop-blur-none',
                               turn.role === 'user'
                                 ? 'rounded-tr-md border border-voice-listening/25 bg-[#0c2233]/80'
                                 : 'rounded-tl-md border border-white/10 bg-background-secondary/80'

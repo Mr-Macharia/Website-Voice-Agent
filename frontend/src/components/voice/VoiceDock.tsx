@@ -65,7 +65,7 @@ export function VoiceDock({
         </defs>
       </svg>
 
-      <div className="relative h-[84px] rounded-[42px] border border-white/10 bg-white/5 shadow-[inset_0_1px_0_rgba(255,255,255,0.14),0_20px_50px_rgba(0,0,0,0.5)] backdrop-blur-xl backdrop-saturate-150">
+      <div className="relative h-[84px] rounded-[42px] border border-white/10 bg-white/5 shadow-[inset_0_1px_0_rgba(255,255,255,0.14),0_20px_50px_rgba(0,0,0,0.5)] backdrop-blur-xl backdrop-saturate-150 pointer-coarse:bg-[#151b2c] pointer-coarse:backdrop-blur-none pointer-coarse:backdrop-saturate-100">
         <div
           className="absolute inset-0"
           style={{ filter: `url(#${filterId})` }}
