@@ -117,13 +117,25 @@ const TARGETS: Record<AuraState, Target> = {
 
 /** States whose size follows the audio level. */
 const REACTIVE: AuraState[] = ['listening', 'speaking']
-const MAX_DPR = 2
+/**
+ * Phones and tablets render at 1x with fewer light passes: the shader's cost
+ * is pixels x passes, and the full-width aura at 2x with 32 passes was too
+ * heavy for mobile GPUs. Desktop keeps the full quality.
+ */
+const IS_TOUCH =
+  typeof window !== 'undefined' &&
+  window.matchMedia('(pointer: coarse)').matches
+const MAX_DPR = IS_TOUCH ? 1 : 2
+const PASSES = IS_TOUCH ? 16 : 32
+/** Slow clockwise turn, radians per second (one turn per ~70s). */
+const SPIN = 0.09
 
 const VERT = 'attribute vec2 a;void main(){gl_Position=vec4(a,0.0,1.0);}'
 const FRAG = `
+#define PASSES ${PASSES.toFixed(1)}
 precision highp float;
 uniform vec2 uRes; uniform float uTime; uniform vec3 uColor;
-uniform float uSpeed, uAmp, uFreq, uScale, uBright;
+uniform float uSpeed, uAmp, uFreq, uScale, uBright, uRot;
 vec3 hue(vec3 c, float h){
   const vec3 k = vec3(0.57735);
   float ca = cos(h);
@@ -143,13 +155,16 @@ vec2 warp(vec2 p, float t, float it){
 void main(){
   vec2 p = gl_FragCoord.xy / uRes - 0.5;
   p.x *= uRes.x / uRes.y;
+  // Rotating the sample point counter-clockwise turns the ring clockwise.
+  float cr = cos(uRot), sr = sin(uRot);
+  p = mat2(cr, sr, -sr, cr) * p;
   // uTime is a phase accumulated on the CPU (speed already applied), so a
   // speed change bends the motion instead of jumping it.
   float t = uTime;
   vec3 core = vec3(0.0);
-  vec2 prev = warp(p, t, -1.0/32.0);
-  for (float i = 1.0; i <= 32.0; i++){
-    float it = i/32.0;
+  vec2 prev = warp(p, t, -1.0/PASSES);
+  for (float i = 1.0; i <= PASSES; i++){
+    float it = i/PASSES;
     vec2 q = warp(p, t, it*3.6);
     float d = abs(length(q) - uScale);
     float mv = distance(q, prev); prev = q;
@@ -158,7 +173,7 @@ void main(){
     // Edge width in real pixels, so a large aura stays sharp.
     core += (1.0 - smoothstep(0.0, 1.5/uRes.y + blur, d)) * c;
   }
-  core /= 32.0;
+  core /= PASSES;
   // No bloom term: a crisp ribbon of light, not a hazy disc.
   vec3 col = core * 2.2 * uBright;
   // Tone-map brightness, not each channel: per-channel mapping squashed
@@ -264,7 +279,8 @@ export function VoiceAura({ state, getLevel, className }: VoiceAuraProps) {
       amp: u('uAmp'),
       freq: u('uFreq'),
       scale: u('uScale'),
-      bright: u('uBright')
+      bright: u('uBright'),
+      rot: u('uRot')
     }
 
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)')
@@ -273,6 +289,7 @@ export function VoiceAura({ state, getLevel, className }: VoiceAuraProps) {
       t: 0,
       phase: 0,
       env: 0,
+      rot: 0,
       pulsePhase: 0,
       pulseRate: 1 / first.pulse,
       speed: first.speed,
@@ -334,6 +351,8 @@ export function VoiceAura({ state, getLevel, className }: VoiceAuraProps) {
       gl.uniform2f(U.res, canvas.width, canvas.height)
       sim.t += dt * 0.05 * (sim.speed * 0.6 + sim.env * 20)
       gl.uniform1f(U.time, sim.t)
+      sim.rot += dt * SPIN
+      gl.uniform1f(U.rot, sim.rot)
       gl.uniform3fv(U.color, sim.color)
       gl.uniform1f(U.speed, sim.speed)
       gl.uniform1f(U.amp, amp)
